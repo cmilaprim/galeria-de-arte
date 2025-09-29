@@ -2,6 +2,7 @@ import sqlite3
 import os
 from datetime import datetime
 from ..models.obra_model import ObraDeArte, StatusObra
+from ..models.artista_model import Artista, StatusArtista
 
 class DatabaseManager:
     def __init__(self, db_file=None):
@@ -12,8 +13,11 @@ class DatabaseManager:
             self.db_file = db_file
         os.makedirs(os.path.dirname(self.db_file), exist_ok=True)
         
+        # criando as tabelas
         self.criar_tabela_obras()
+        self.criar_tabela_artistas()
     
+    # ---------------- OBRAS ---------------- #
     def criar_tabela_obras(self):
         """Cria a tabela"""
         conn = sqlite3.connect(self.db_file)
@@ -157,4 +161,146 @@ class DatabaseManager:
             imagem=imagem,
             data_cadastro=data_cadastro
         )
-        
+
+    # ========== BEGIN ARTISTAS ========== #
+    def criar_tabela_artistas(self):
+        """Cria a tabela de Artistas uma única vez (idempotente)."""
+        import sqlite3
+        conn = sqlite3.connect(self.db_file)
+        c = conn.cursor()
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS Artistas (
+                id_artista     INTEGER PRIMARY KEY,
+                nome           TEXT NOT NULL,
+                nascimento     TEXT NOT NULL,        -- DD/MM/YYYY
+                nacionalidade  TEXT NOT NULL,
+                especialidade  TEXT NOT NULL,
+                status         TEXT NOT NULL,        -- 'Ativo' | 'Inativo'
+                data_cadastro  TEXT NOT NULL,        -- DD/MM/YYYY
+                biografia      TEXT NOT NULL
+            )
+        """)
+        conn.commit()
+        conn.close()
+
+    def _row_to_artista(self, row):
+        """Converte uma tupla do SQLite em objeto Artista."""
+        if not row:
+            return None
+        (id_artista, nome, nasc, nac, esp, status_str, data_cad, bio) = row
+        status_enum = StatusArtista.ATIVO if status_str == "Ativo" else StatusArtista.INATIVO
+        return Artista(
+            id_artista=id_artista,
+            nome=nome,
+            nascimento=nasc,
+            nacionalidade=nac,
+            especialidade=esp,
+            status=status_enum,
+            data_cadastro=data_cad,
+            biografia=bio
+        )
+
+    def inserir_artista(self, artista: Artista) -> int:
+        """Insere e retorna o ID gerado."""
+        import sqlite3
+        conn = sqlite3.connect(self.db_file)
+        c = conn.cursor()
+        c.execute("""
+            INSERT INTO Artistas
+                (nome, nascimento, nacionalidade, especialidade, status, data_cadastro, biografia)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            artista.nome,
+            artista.nascimento,
+            artista.nacionalidade,
+            artista.especialidade,
+            artista.status.value,
+            artista.data_cadastro,
+            artista.biografia
+        ))
+        conn.commit()
+        new_id = c.lastrowid
+        conn.close()
+        return new_id
+
+    def atualizar_artista(self, artista: Artista) -> None:
+        """Atualiza todos os campos (exceto PK)."""
+        import sqlite3
+        conn = sqlite3.connect(self.db_file)
+        c = conn.cursor()
+        c.execute("""
+            UPDATE Artistas
+            SET nome=?, nascimento=?, nacionalidade=?, especialidade=?,
+                status=?, data_cadastro=?, biografia=?
+            WHERE id_artista=?
+        """, (
+            artista.nome,
+            artista.nascimento,
+            artista.nacionalidade,
+            artista.especialidade,
+            artista.status.value,
+            artista.data_cadastro,
+            artista.biografia,
+            artista.id_artista
+        ))
+        conn.commit()
+        conn.close()
+
+    def obter_artista(self, id_artista: int):
+        """Busca 1 artista pelo ID."""
+        import sqlite3
+        conn = sqlite3.connect(self.db_file)
+        c = conn.cursor()
+        c.execute("SELECT * FROM Artistas WHERE id_artista=?", (id_artista,))
+        row = c.fetchone()
+        conn.close()
+        return self._row_to_artista(row)
+
+    def listar_artistas(self):
+        """Lista TODOS os artistas (ativos e inativos)."""
+        import sqlite3
+        conn = sqlite3.connect(self.db_file)
+        c = conn.cursor()
+        c.execute("SELECT * FROM Artistas ORDER BY nome")
+        rows = c.fetchall()
+        conn.close()
+        return [self._row_to_artista(r) for r in rows]
+
+    def buscar_artistas(self, filtros: dict):
+        """
+        Busca por múltiplos campos. Só filtra pelos campos preenchidos:
+        nome, nascimento, nacionalidade, especialidade, status, data_cadastro.
+        Usa LIKE para textos e igualdade para status.
+        """
+        import sqlite3
+        where, params = [], []
+
+        def like(campo, valor):
+            if valor:
+                where.append(f"{campo} LIKE ?")
+                params.append(f"%{valor}%")
+
+        like("nome", filtros.get("nome"))
+        like("nascimento", filtros.get("nascimento"))
+        like("nacionalidade", filtros.get("nacionalidade"))
+        like("especialidade", filtros.get("especialidade"))
+        like("data_cadastro", filtros.get("data_cadastro"))
+
+        status = (filtros.get("status") or "").strip()
+        if status:
+            where.append("status = ?")
+            params.append(status)
+
+        sql = "SELECT * FROM Artistas"
+        if where:
+            sql += " WHERE " + " AND ".join(where)
+        sql += " ORDER BY nome"
+
+        conn = sqlite3.connect(self.db_file)
+        c = conn.cursor()
+        c.execute(sql, tuple(params))
+        rows = c.fetchall()
+        conn.close()
+        return [self._row_to_artista(r) for r in rows]
+
+    # ========== END ARTISTAS ========== #
