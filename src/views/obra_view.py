@@ -14,6 +14,7 @@ class ObraView:
         self.root.geometry("800x600")
         self.root.minsize(800, 600)
         self.imagem_path = None
+        self.artistas_selecionados = []
         self.criar_interface()
         
     def criar_interface(self):
@@ -32,7 +33,6 @@ class ObraView:
         frm_cadastro.pack(fill="x", padx=10, pady=8)
         for i in range(8):
             frm_cadastro.columnconfigure(i, weight=1, uniform="col")
-
 
         # --- Botão Home (Voltar) --- #
         frame_home = tk.Frame(frm_cadastro, bg="#f0f0f0", width=0, height=0)
@@ -111,152 +111,36 @@ class ObraView:
 
         # --- Botões Salvar / Cancelar / Buscar --- #
         btns_frame = ttk.Frame(frm_cadastro)
-        btns_frame.grid(row=0, column=8, rowspan=3, sticky="n", padx=10, pady=5)  # coluna 8 para não sobrepor
-
+        btns_frame.grid(row=0, column=8, rowspan=3, sticky="n", padx=10, pady=5)
         self.botao_salvar = ttk.Button(btns_frame, text="Salvar", command=self.salvar_obra, width=16)
         self.botao_salvar.pack(pady=4)
-
         ttk.Button(btns_frame, text="Cancelar", command=self.limpar_form, width=16).pack(pady=4)
-
         ttk.Button(btns_frame, text="Buscar", command=self.carregar_obras, width=16).pack(pady=4)
 
-        # --- FRAME DE LISTAGEM ---
+        # --- FRAME DE LISTAGEM --- #
         listagem_frame = ttk.LabelFrame(self.root, text="Listagem de Obras", padding=10)
         listagem_frame.pack(fill="both", expand=True, padx=10, pady=5)
         listagem_frame.columnconfigure(0, weight=1)
         listagem_frame.rowconfigure(0, weight=1)
-
         colunas = ("ID", "Título", "Artista", "Tipo", "Ano", "Técnica", "Dimensões", "Localização", "Preço")
         self.tree = ttk.Treeview(listagem_frame, columns=colunas, show="headings")
-
-        style = ttk.Style()
         style.configure("Treeview", bordercolor="#d0d0d0", relief="solid")
-
         for c in colunas:
             self.tree.heading(c, text=c)
             self.tree.column(c, width=100, minwidth=50, anchor="w", stretch=True)
-
         self.tree.grid(row=0, column=0, sticky="nsew")
-
-        # Scrollbars
         yscroll = ttk.Scrollbar(listagem_frame, orient="vertical", command=self.tree.yview)
         xscroll = ttk.Scrollbar(listagem_frame, orient="horizontal", command=self.tree.xview)
         self.tree.configure(yscrollcommand=yscroll.set, xscrollcommand=xscroll.set)
         yscroll.grid(row=0, column=1, sticky="ns")
         xscroll.grid(row=1, column=0, sticky="ew")
-
         listagem_frame.grid_rowconfigure(0, weight=1)
         listagem_frame.grid_columnconfigure(0, weight=1)
-
         self.tree.bind("<Double-1>", self.editar_obra)
         self.carregar_obras()
-    
+
+    # ---------------------- IMAGEM ---------------------- #
     def selecionar_imagem(self):
-        """abre diálogo para selecionar imagem"""
-        try:
-            filename = filedialog.askopenfilename(
-                title="Selecionar Imagem",
-                filetypes=[("Imagens", "*.png *.jpg *.jpeg *.gif *.bmp"), ("Todos", "*.*")]
-            )
-            if filename:
-                self.imagem_path = filename
-                self.carregar_preview_imagem(filename)
-                
-        except Exception as e:
-            messagebox.showerror("Erro", f"Erro ao selecionar imagem: {str(e)}")
-    
-    def carregar_preview_imagem(self, caminho_imagem):
-        """carrega e exibe preview da imagem"""
-        try:
-            imagem = Image.open(caminho_imagem)
-            imagem.thumbnail((150, 100), Image.Resampling.LANCZOS)
-            
-            self.imagem_tk = ImageTk.PhotoImage(imagem)
-            self.imagem_label.config(image=self.imagem_tk, text="")
-            
-            nome_arquivo = caminho_imagem.split("/")[-1]
-            self.criar_tooltip(self.imagem_label, f"Arquivo: {nome_arquivo}")
-            
-        except Exception as e:
-            messagebox.showerror("Erro", f"Erro ao carregar preview da imagem: {str(e)}")
-            self.imagem_label.config(image="", text="Erro ao carregar")
-    
-    def visualizar_imagem(self):
-        """abre janela para visualizar a imagem em tamanho maior"""
-        if not self.imagem_path:
-            messagebox.showwarning("Aviso", "Nenhuma imagem selecionada")
-            return
-        
-        try:
-            janela_imagem = tk.Toplevel(self.root)
-            janela_imagem.title("Visualizar Imagem")
-            janela_imagem.geometry("600x500")
-            janela_imagem.resizable(True, True)
-            
-            canvas = tk.Canvas(janela_imagem)
-            scrollbar_v = ttk.Scrollbar(janela_imagem, orient="vertical", command=canvas.yview)
-            scrollbar_h = ttk.Scrollbar(janela_imagem, orient="horizontal", command=canvas.xview)
-            
-            canvas.configure(yscrollcommand=scrollbar_v.set, xscrollcommand=scrollbar_h.set)
-            
-            imagem_original = Image.open(self.imagem_path)
-            
-            if imagem_original.width > 800 or imagem_original.height > 600:
-                imagem_original.thumbnail((800, 600), Image.Resampling.LANCZOS)
-            
-            imagem_tk_grande = ImageTk.PhotoImage(imagem_original)
-            
-            canvas.create_image(0, 0, anchor="nw", image=imagem_tk_grande)
-            canvas.configure(scrollregion=canvas.bbox("all"))
-            
-            canvas.pack(side="left", fill="both", expand=True)
-            scrollbar_v.pack(side="right", fill="y")
-            scrollbar_h.pack(side="bottom", fill="x")
-            
-            janela_imagem.imagem_tk_grande = imagem_tk_grande
-            
-            info_frame = ttk.Frame(janela_imagem)
-            info_frame.pack(side="bottom", fill="x", padx=10, pady=5)
-            
-            nome_arquivo = self.imagem_path.split("/")[-1]
-            ttk.Label(info_frame, text=f"Arquivo: {nome_arquivo}").pack(side="left")
-            ttk.Label(info_frame, text=f"Tamanho: {imagem_original.width}x{imagem_original.height}").pack(side="right")
-            
-        except Exception as e:
-            messagebox.showerror("Erro", f"Erro ao visualizar imagem: {str(e)}")
-    
-    def remover_imagem(self):
-        """remove a imagem selecionada"""
-        if self.imagem_path:
-            resposta = messagebox.askyesno("Confirmar", "Remover a imagem selecionada?")
-            if resposta:
-                self.imagem_path = None
-                self.imagem_tk = None
-                self.imagem_label.config(image="", text="Nenhuma imagem")
-    
-    def criar_tooltip(self, widget, texto):
-        """cria tooltip para mostrar informações adicionais"""
-        def mostrar_tooltip(event):
-            tooltip = tk.Toplevel()
-            tooltip.wm_overrideredirect(True)
-            tooltip.wm_geometry(f"+{event.x_root+10}+{event.y_root+10}")
-            
-            label = tk.Label(tooltip, text=texto, background="lightyellow", relief="solid", borderwidth=1, font=("Arial", 9))
-            label.pack()
-            tooltip.after(3000, tooltip.destroy)
-        
-        widget.bind("<Enter>", mostrar_tooltip)
-    
-    def atualizar_data(self):
-        """atualiza o campo de data com a data atual"""
-        data_atual = date.today().strftime("%d/%m/%Y")
-        self.data_entry.config(state="normal")
-        self.data_entry.delete(0, tk.END)
-        self.data_entry.insert(0, data_atual)
-        self.data_entry.config(state="readonly")
-    
-    def selecionar_imagem(self):
-        """abre diálogo para selecionar imagem"""
         try:
             filename = filedialog.askopenfilename(
                 title="Selecionar Imagem",
@@ -268,27 +152,82 @@ class ObraView:
                 self.imagem_label.config(text=nome_arquivo[:20] + "..." if len(nome_arquivo) > 20 else nome_arquivo)
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao selecionar imagem: {str(e)}")
-    
-    def adicionar_artista(self, event=None):
-        """adiciona artista à lista"""
-        artista = self.artista_entry.get().strip()
-        if artista:
-            artistas_atuais = []
-            for i in range(self.artistas_listbox.size()):
-                artistas_atuais.append(self.artistas_listbox.get(i))
-                
-            if artista not in artistas_atuais:
-                self.artistas_listbox.insert(tk.END, artista)
-                self.artista_entry.delete(0, tk.END)
-            else:
-                messagebox.showwarning("Aviso", "Artista já foi adicionado à lista")
-    
+
+    def carregar_preview_imagem(self, caminho_imagem):
+        try:
+            imagem = Image.open(caminho_imagem)
+            imagem.thumbnail((150, 100), Image.Resampling.LANCZOS)
+            self.imagem_tk = ImageTk.PhotoImage(imagem)
+            self.imagem_label.config(image=self.imagem_tk, text="")
+            nome_arquivo = caminho_imagem.split("/")[-1]
+            self.criar_tooltip(self.imagem_label, f"Arquivo: {nome_arquivo}")
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro ao carregar preview da imagem: {str(e)}")
+            self.imagem_label.config(image="", text="Erro ao carregar")
+
+    def visualizar_imagem(self):
+        if not self.imagem_path:
+            messagebox.showwarning("Aviso", "Nenhuma imagem selecionada")
+            return
+        try:
+            janela_imagem = tk.Toplevel(self.root)
+            janela_imagem.title("Visualizar Imagem")
+            janela_imagem.geometry("600x500")
+            janela_imagem.resizable(True, True)
+            canvas = tk.Canvas(janela_imagem)
+            scrollbar_v = ttk.Scrollbar(janela_imagem, orient="vertical", command=canvas.yview)
+            scrollbar_h = ttk.Scrollbar(janela_imagem, orient="horizontal", command=canvas.xview)
+            canvas.configure(yscrollcommand=scrollbar_v.set, xscrollcommand=scrollbar_h.set)
+            imagem_original = Image.open(self.imagem_path)
+            if imagem_original.width > 800 or imagem_original.height > 600:
+                imagem_original.thumbnail((800, 600), Image.Resampling.LANCZOS)
+            imagem_tk_grande = ImageTk.PhotoImage(imagem_original)
+            canvas.create_image(0, 0, anchor="nw", image=imagem_tk_grande)
+            canvas.configure(scrollregion=canvas.bbox("all"))
+            canvas.pack(side="left", fill="both", expand=True)
+            scrollbar_v.pack(side="right", fill="y")
+            scrollbar_h.pack(side="bottom", fill="x")
+            janela_imagem.imagem_tk_grande = imagem_tk_grande
+            info_frame = ttk.Frame(janela_imagem)
+            info_frame.pack(side="bottom", fill="x", padx=10, pady=5)
+            nome_arquivo = self.imagem_path.split("/")[-1]
+            ttk.Label(info_frame, text=f"Arquivo: {nome_arquivo}").pack(side="left")
+            ttk.Label(info_frame, text=f"Tamanho: {imagem_original.width}x{imagem_original.height}").pack(side="right")
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro ao visualizar imagem: {str(e)}")
+
+    def remover_imagem(self):
+        if self.imagem_path:
+            resposta = messagebox.askyesno("Confirmar", "Remover a imagem selecionada?")
+            if resposta:
+                self.imagem_path = None
+                self.imagem_tk = None
+                self.imagem_label.config(image="", text="Nenhuma imagem")
+
+    def criar_tooltip(self, widget, texto):
+        def mostrar_tooltip(event):
+            tooltip = tk.Toplevel()
+            tooltip.wm_overrideredirect(True)
+            tooltip.wm_geometry(f"+{event.x_root+10}+{event.y_root+10}")
+            label = tk.Label(tooltip, text=texto, background="lightyellow", relief="solid", borderwidth=1, font=("Arial", 9))
+            label.pack()
+            tooltip.after(3000, tooltip.destroy)
+        widget.bind("<Enter>", mostrar_tooltip)
+
+    # ---------------------- DATA ---------------------- #
+    def atualizar_data(self):
+        data_atual = date.today().strftime("%d/%m/%Y")
+        self.data_entry.config(state="normal")
+        self.data_entry.delete(0, tk.END)
+        self.data_entry.insert(0, data_atual)
+        self.data_entry.config(state="readonly")
+
+    # ---------------------- ARTISTAS ---------------------- #
     def obter_artistas(self):
-        """retorna lista de artistas selecionados"""
-        return [self.artistas_listbox.get(i) for i in range(self.artistas_listbox.size())]
-    
+        return getattr(self, 'artistas_selecionados', [])
+
+    # ---------------------- CADASTRO / EDIÇÃO ---------------------- #
     def salvar_obra(self):
-        """salva a obra no banco de dados (criação ou edição)"""
         try:
             titulo = self.titulo_entry.get().strip()
             ano = self.ano_entry.get().strip()
@@ -299,14 +238,14 @@ class ObraView:
             localizacao = self.localizacao_entry.get().strip()
             preco = self.preco_entry.get().strip()
             status_str = self.status_combo.get()
-            
+
             if not artistas:
                 messagebox.showerror("Erro", "Adicione pelo menos um artista")
                 return
-            
+
             status = next((s for s in StatusObra if s.value == status_str), StatusObra.DISPONIVEL)
             artista_str = ", ".join(artistas)
-            
+
             if hasattr(self, 'obra_em_edicao') and self.obra_em_edicao:
                 sucesso, mensagem = self.controller.atualizar_obra(
                     self.obra_em_edicao.id_obra, titulo, ano, artista_str, tipo, 
@@ -317,19 +256,18 @@ class ObraView:
                     titulo, ano, artista_str, tipo, tecnica, dimensoes, 
                     localizacao, preco, status, self.imagem_path
                 )
-            
+
             if sucesso:
                 messagebox.showinfo("Sucesso", mensagem)
                 self.limpar_form()
                 self.carregar_obras()
             else:
                 messagebox.showerror("Erro", mensagem)
-                
+
         except Exception as e:
             messagebox.showerror("Erro", f"Erro inesperado: {str(e)}")
-    
+
     def limpar_form(self):
-        """limpa todos os campos do formulário"""
         self.titulo_entry.delete(0, tk.END)
         self.ano_entry.delete(0, tk.END)
         self.tipo_combo.set('')
@@ -339,29 +277,28 @@ class ObraView:
         self.preco_entry.delete(0, tk.END)
         self.preco_entry.insert(0, "0.00")
         self.status_combo.set("Disponível")
+
         self.artistas_selecionados = []
         self.label_artistas_selecionados.config(text="Nenhum artista selecionado")
-        
+
         self.imagem_path = None
         self.imagem_tk = None
         self.imagem_label.config(image="", text="Nenhuma imagem")
-        
+
         self.atualizar_data()
-        
+
         if hasattr(self, 'obra_em_edicao'):
             self.obra_em_edicao = None
-        
+
         if hasattr(self, 'botao_salvar'):
             self.botao_salvar.config(text="Salvar")
-    
+
     def carregar_obras(self):
-        """carrega todas as obras na treeview"""
         try:
             for item in self.tree.get_children():
                 self.tree.delete(item)
 
             obras = self.controller.listar_obras()
-            
             for obra in obras:
                 self.tree.insert("", tk.END, values=(
                     obra.id_obra,
@@ -374,38 +311,30 @@ class ObraView:
                     obra.localizacao,
                     f"R$ {obra.preco:.2f}".replace(".", ",")
                 ))
-                
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao carregar obras: {str(e)}")
-    
+
     def editar_obra(self, event):
-        """duplo clique para editar obra"""
         try:
             item = self.tree.selection()[0]
             obra_id = self.tree.item(item, "values")[0]
-            
             obra = self.controller.buscar_obra_por_id(obra_id)
             if not obra:
                 messagebox.showerror("Erro", "Obra não encontrada")
                 return
-            
             if obra.status.value == "Vendida":
                 messagebox.showwarning("Aviso", "Obras vendidas não podem ser editadas")
                 return
-            
             self.preencher_formulario_edicao(obra)
             self.obra_em_edicao = obra
             self.botao_salvar.config(text="Atualizar")
-            
         except IndexError:
             pass
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao carregar obra para edição: {str(e)}")
-    
+
     def preencher_formulario_edicao(self, obra):
-        """preenche o formulário com os dados da obra para edição"""
         self.limpar_form()
-        
         self.titulo_entry.insert(0, obra.titulo)
         self.ano_entry.insert(0, str(obra.ano))
         self.tipo_combo.set(obra.tipo)
@@ -415,19 +344,19 @@ class ObraView:
         self.preco_entry.delete(0, tk.END)
         self.preco_entry.insert(0, str(obra.preco))
         self.status_combo.set(obra.status.value)
-        
+
         if obra.data_cadastro:
             self.data_entry.config(state="normal")
             self.data_entry.delete(0, tk.END)
             self.data_entry.insert(0, obra.data_cadastro.strftime("%d/%m/%Y"))
             self.data_entry.config(state="readonly")
-        
+
         if obra.artista:
-            artistas = [artista.strip() for artista in obra.artista.split(',')]
-            for artista in artistas:
-                if artista: 
-                    self.artistas_listbox.insert(tk.END, artista)
-        
+            self.artistas_selecionados = [a.strip() for a in obra.artista.split(',') if a.strip()]
+            texto = "Artistas Selecionados: " + ", ".join(self.artistas_selecionados) \
+                    if self.artistas_selecionados else "Nenhum artista selecionado"
+            self.label_artistas_selecionados.config(text=texto)
+
         if obra.imagem:
             self.imagem_path = obra.imagem
             if isinstance(obra.imagem, str) and obra.imagem.endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp')):
@@ -438,54 +367,18 @@ class ObraView:
                     self.imagem_label.config(text=nome_arquivo[:15] + "..." if len(nome_arquivo) > 15 else nome_arquivo)
             else:
                 self.imagem_label.config(text="Imagem carregada")
-    
-    def carregar_artistas_disponiveis(self):
-            """Carrega artistas cadastrados no banco para seleção"""
-            try:
-                artistas = self.controller.listar_artistas()
-                self.artistas_listbox.delete(0, tk.END)
-                for artista in artistas:
-                    self.artistas_listbox.insert(tk.END, artista.nome)
-            except Exception as e:
-                messagebox.showerror("Erro", f"Erro ao carregar artistas: {str(e)}")
 
-    def obter_artistas(self):
-        """Retorna lista de artistas selecionados na listbox"""
-        selecionados = [self.artistas_listbox.get(i) for i in self.artistas_listbox.curselection()]
-        return selecionados
-        
-    def carregar_artistas_disponiveis(self):
-        """Carrega artistas cadastrados no banco para seleção no Listbox"""
-        try:
-            artistas = self.controller.listar_artistas()
-            self.artistas_listbox.delete(0, tk.END)
-            for artista in artistas:
-                self.artistas_listbox.insert(tk.END, artista.nome)
-        except Exception as e:
-            messagebox.showerror("Erro", f"Erro ao carregar artistas: {str(e)}")
-
-    def centralizar_janela(self, janela, largura, altura):
-        """Centraliza a janela na tela"""
-        largura_tela = janela.winfo_screenwidth()
-        altura_tela = janela.winfo_screenheight()
-        x = (largura_tela - largura) // 2
-        y = (altura_tela - altura) // 2
-        janela.geometry(f"{largura}x{altura}+{x}+{y}")
-
+    # ---------------------- SELEÇÃO DE ARTISTAS ---------------------- #
     def abrir_selecionar_artistas(self):
-        # Cria a janela de seleção de artistas
         janela_artistas = tk.Toplevel(self.root)
         janela_artistas.title("Seleção de Artistas")
         janela_artistas.transient(self.root)
         janela_artistas.grab_set()
-
-        # Centralizar a janela
         largura, altura = 500, 400
         x = (self.root.winfo_screenwidth() // 2) - (largura // 2)
         y = (self.root.winfo_screenheight() // 2) - (altura // 2)
         janela_artistas.geometry(f"{largura}x{altura}+{x}+{y}")
 
-        # Treeview com colunas
         colunas = ("ID", "Nome", "Nacionalidade", "Nascimento")
         tree_artistas = ttk.Treeview(janela_artistas, columns=colunas, show="headings", selectmode="extended")
         for col in colunas:
@@ -493,25 +386,13 @@ class ObraView:
             tree_artistas.column(col, width=120, anchor="center")
         tree_artistas.pack(fill=tk.BOTH, expand=True, padx=10, pady=(10, 5))
 
-        # Buscar artistas do manager/controller
-        artistas = self.manager.listar_artistas()  # Deve retornar instâncias de Artista
+        artistas = self.manager.listar_artistas()
         for artista in artistas:
-            tree_artistas.insert(
-                "",
-                tk.END,
-                values=(
-                    artista.id_artista,
-                    artista.nome,
-                    artista.nacionalidade,
-                    artista.nascimento
-                )
-            )
+            tree_artistas.insert("", tk.END, values=(artista.id_artista, artista.nome, artista.nacionalidade, artista.nascimento))
 
-        # Frame para botões
         frame_botoes = ttk.Frame(janela_artistas)
         frame_botoes.pack(pady=10)
 
-        # Função de confirmação
         def confirmar_selecao():
             itens = tree_artistas.selection()
             selecionados = [tree_artistas.item(i, "values")[1] for i in itens]
@@ -521,9 +402,15 @@ class ObraView:
             self.label_artistas_selecionados.config(text=texto)
             janela_artistas.destroy()
 
-        # Botões Confirmar e Cancelar
         ttk.Button(frame_botoes, text="Confirmar Seleção", command=confirmar_selecao).pack(side="left", padx=10)
         ttk.Button(frame_botoes, text="Cancelar", command=janela_artistas.destroy).pack(side="left", padx=10)
+
+    def centralizar_janela(self, janela, largura, altura):
+        largura_tela = janela.winfo_screenwidth()
+        altura_tela = janela.winfo_screenheight()
+        x = (largura_tela - largura) // 2
+        y = (altura_tela - altura) // 2
+        janela.geometry(f"{largura}x{altura}+{x}+{y}")
 
     def voltar_inicio(self):
         try:
@@ -531,11 +418,9 @@ class ObraView:
         except Exception:
             messagebox.showerror("Erro", "Não foi possível voltar à tela inicial (import).")
             return
-
         for w in self.root.winfo_children():
             w.destroy()
         TelaInicial(self.root, self.manager)
-    
+
     def run(self):
-        """iniciar a aplicação"""
         self.root.mainloop()
