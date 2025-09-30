@@ -2,186 +2,153 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from datetime import date
 from PIL import Image, ImageTk
-from ..controllers.obra_controller import ObraController
-from ..models.obra_model import StatusObra
+from src.controllers.obra_controller import ObraController
+from src.models.obra_model import StatusObra
 
 class ObraView:
-    def __init__(self):
+    def __init__(self, root, manager=None):
+        self.root = root
+        self.manager = manager
         self.controller = ObraController()
-        self.root = tk.Tk()
-        self.root.title("Sistema de Galeria de Arte")
-        self.root.geometry("1200x800")
-        self.root.minsize(1000, 700)
+        self.root.title("Sistema de Gestão de Galeria de Arte")
+        self.root.geometry("800x600")
+        self.root.minsize(800, 600)
         self.imagem_path = None
         self.criar_interface()
         
     def criar_interface(self):
-        cadastro_frame = ttk.LabelFrame(self.root, text="Cadastro de Obras", padding=15)
-        cadastro_frame.pack(fill=tk.X, padx=10, pady=5)
-        
-        for i in range(4):
-            cadastro_frame.columnconfigure(i, weight=1, minsize=250)
-        
-        #primeira linha -> ano, titulo, tecnica, dimensoes
-        #coluna 0 - ano
-        ttk.Label(cadastro_frame, text="Ano:").grid(row=0, column=0, sticky=tk.W, padx=(5, 0), pady=5)
-        self.ano_entry = ttk.Entry(cadastro_frame, width=15)
-        self.ano_entry.grid(row=0, column=0, sticky=tk.EW, padx=(50, 15), pady=5)
-        
-        #coluna 1 - titulo
-        ttk.Label(cadastro_frame, text="Título:").grid(row=0, column=1, sticky=tk.W, padx=(5, 0), pady=5)
-        self.titulo_entry = ttk.Entry(cadastro_frame, width=25)
-        self.titulo_entry.grid(row=0, column=1, sticky=tk.EW, padx=(60, 15), pady=5)
-        
-        #coluna 2 - tecnica
-        ttk.Label(cadastro_frame, text="Técnica:").grid(row=0, column=2, sticky=tk.W, padx=(5, 0), pady=5)
-        self.tecnica_entry = ttk.Entry(cadastro_frame, width=20)
-        self.tecnica_entry.grid(row=0, column=2, sticky=tk.EW, padx=(70, 15), pady=5)
-        
-        #coluna 3 - dimensoes
-        ttk.Label(cadastro_frame, text="Dimensões:").grid(row=0, column=3, sticky=tk.W, padx=(5, 0), pady=5)
-        self.dimensoes_entry = ttk.Entry(cadastro_frame, width=20)
-        self.dimensoes_entry.grid(row=0, column=3, sticky=tk.EW, padx=(85, 15), pady=5)
-        
-        #segunda linha: tipo, status, locali, preco
-        #coluna 0 - tipo
-        ttk.Label(cadastro_frame, text="Tipo:").grid(row=1, column=0, sticky=tk.W, padx=(5, 0), pady=5)
-        self.tipo_combo = ttk.Combobox(cadastro_frame, values=self.controller.get_tipos_obra(), state="readonly", width=13)
-        self.tipo_combo.grid(row=1, column=0, sticky=tk.EW, padx=(50, 15), pady=5)
-        
-        #coluna 1 - status
-        ttk.Label(cadastro_frame, text="Status:").grid(row=1, column=1, sticky=tk.W, padx=(5, 0), pady=5)
-        self.status_combo = ttk.Combobox(cadastro_frame, values=self.controller.get_status_obra(), 
-                                        state="readonly", width=18)
-        self.status_combo.grid(row=1, column=1, sticky=tk.EW, padx=(60, 15), pady=5)
-        self.status_combo.set("Disponível")
-        
-        #coluna 2 - locali
-        ttk.Label(cadastro_frame, text="Localização:").grid(row=1, column=2, sticky=tk.W, padx=(5, 0), pady=5)
-        self.localizacao_entry = ttk.Entry(cadastro_frame, width=18)
-        self.localizacao_entry.grid(row=1, column=2, sticky=tk.EW, padx=(90, 15), pady=5)
-        
-        #coluna 3 - preco
-        ttk.Label(cadastro_frame, text="Preço:").grid(row=1, column=3, sticky=tk.W, padx=(5, 0), pady=5)
-        self.preco_entry = ttk.Entry(cadastro_frame, width=15)
-        self.preco_entry.grid(row=1, column=3, sticky=tk.EW, padx=(60, 15), pady=5)
-        self.preco_entry.insert(0, "0.00")
-        
-        #terceira linha: data e imagem
-        #coluna 0 - data
-        ttk.Label(cadastro_frame, text="Data cadastro:").grid(row=2, column=0, sticky=tk.W, padx=(5, 0), pady=5)
-        self.data_entry = ttk.Entry(cadastro_frame, width=13, state="readonly")
-        self.data_entry.grid(row=2, column=0, sticky=tk.EW, padx=(100, 15), pady=5)
+        bg = "#F3F4F6"
+        self.root.configure(bg=bg)
+        style = ttk.Style()
+        try: style.theme_use("clam")
+        except Exception: pass
+        style.configure("TFrame", background=bg)
+        style.configure("TLabelframe", background=bg)
+        style.configure("TLabelframe.Label", background=bg)
+        style.configure("TLabel", background=bg)
+
+        # --- FRAME DE CADASTRO --- #
+        frm_cadastro = ttk.LabelFrame(self.root, text="Cadastro de Obras", padding=10)
+        frm_cadastro.pack(fill="x", padx=10, pady=8)
+        for i in range(8):
+            frm_cadastro.columnconfigure(i, weight=1, uniform="col")
+
+
+        # --- Botão Home (Voltar) --- #
+        frame_home = tk.Frame(frm_cadastro, bg="#f0f0f0", width=0, height=0)
+        frame_home.place(relx=1, rely=0, x=15, y=-35, anchor="ne")
+        self.btn_home = tk.Button(
+            frame_home,
+            text="❌",
+            font=("Segoe UI Emoji", 10),
+            bd=0,
+            highlightthickness=0,
+            padx=0,
+            pady=0,
+            bg="#f0f0f0",
+            activebackground="#dddddd",
+            cursor="hand2",
+            command=self.voltar_inicio
+        )
+        self.btn_home.pack(expand=True, fill="both")
+
+        # --- Linha 1: Ano, Título, Técnica, Dimensões --- #
+        campos = [("Ano:", "ano_entry", 15),
+                ("Título:", "titulo_entry", 25),
+                ("Técnica:", "tecnica_entry", 20),
+                ("Dimensões:", "dimensoes_entry", 20)]
+        for idx, (label_text, attr_name, width) in enumerate(campos):
+            col_label = idx * 2
+            col_entry = idx * 2 + 1
+            ttk.Label(frm_cadastro, text=label_text).grid(row=0, column=col_label, sticky="w", padx=(10,5), pady=5)
+            entry = ttk.Entry(frm_cadastro)  # sem width
+            entry.grid(row=0, column=col_entry, sticky="ew", padx=(5,10), pady=5)
+            setattr(self, attr_name, entry)
+
+        # --- Linha 2: Tipo, Status, Localização, Preço --- #
+        campos2 = [("Tipo:", "tipo_combo", self.controller.get_tipos_obra(), 1),
+                ("Status:", "status_combo", self.controller.get_status_obra(), 3),
+                ("Localização:", "localizacao_entry", None, 5),
+                ("Preço:", "preco_entry", None, 7)]
+        for label_text, attr_name, values, col in campos2:
+            ttk.Label(frm_cadastro, text=label_text).grid(row=1, column=col-1, sticky="w", padx=(10,5), pady=5)
+            if "combo" in attr_name:
+                combo = ttk.Combobox(frm_cadastro, values=values, state="readonly")
+                combo.grid(row=1, column=col, sticky="ew", padx=(5,10), pady=5)
+                if attr_name=="status_combo": combo.set("Disponível")
+                setattr(self, attr_name, combo)
+            else:
+                entry = ttk.Entry(frm_cadastro)
+                entry.grid(row=1, column=col, sticky="ew", padx=(5,10), pady=5)
+                if attr_name=="preco_entry": entry.insert(0, "0.00")
+                setattr(self, attr_name, entry)
+
+        # --- Linha 3: Data e Imagem --- #
+        ttk.Label(frm_cadastro, text="Data cadastro:").grid(row=2, column=0, sticky="w", padx=(10,5), pady=5)
+        self.data_entry = ttk.Entry(frm_cadastro, state="readonly")
+        self.data_entry.grid(row=2, column=1, sticky="ew", padx=(5,10), pady=5)
         self.atualizar_data()
-        
-        #coluna 1 - imagem
-        ttk.Label(cadastro_frame, text="Imagem:").grid(row=2, column=1, sticky=tk.W, padx=(5, 0), pady=5)
-        
-        imagem_frame = ttk.Frame(cadastro_frame)
-        imagem_frame.grid(row=2, column=1, columnspan=2, sticky=tk.EW, padx=(70, 15), pady=5)
-        
+
+        ttk.Label(frm_cadastro, text="Imagem:").grid(row=2, column=2, sticky="w", padx=(10,5), pady=5)
+        imagem_frame = ttk.Frame(frm_cadastro)
+        imagem_frame.grid(row=2, column=3, columnspan=3, sticky="ew", padx=5, pady=5)
         self.preview_frame = ttk.Frame(imagem_frame)
-        self.preview_frame.grid(row=0, column=0, padx=(0, 10), sticky=tk.W)
-        
+        self.preview_frame.grid(row=0, column=0, padx=(0,10), sticky="w")
         self.imagem_label = ttk.Label(self.preview_frame, text="Nenhuma imagem", relief="solid", width=20, anchor="center")
-        self.imagem_label.grid(row=0, column=0, pady=(0, 5))
-        
+        self.imagem_label.grid(row=0, column=0, pady=(0,5))
         botoes_imagem_frame = ttk.Frame(self.preview_frame)
         botoes_imagem_frame.grid(row=1, column=0, pady=5)
-        
-        ttk.Button(botoes_imagem_frame, text="Selecionar", command=self.selecionar_imagem, width=10).grid(row=0, column=0, padx=(0, 5))
-        ttk.Button(botoes_imagem_frame, text="Visualizar", command=self.visualizar_imagem, width=10).grid(row=0, column=1, padx=5)
-        ttk.Button(botoes_imagem_frame, text="Remover", command=self.remover_imagem, width=10).grid(row=0, column=2, padx=5)
-        
-        imagem_frame.columnconfigure(0, weight=1)
-        
-        #quarta linha: artistas
-        ttk.Label(cadastro_frame, text="Artistas:").grid(row=3, column=0, sticky=tk.NW, padx=(5, 0), pady=(10, 5))
-        
-        artistas_frame = ttk.Frame(cadastro_frame)
-        artistas_frame.grid(row=3, column=0, columnspan=3, sticky=tk.EW, padx=(70, 15), pady=5)
-        
-        entry_button_frame = ttk.Frame(artistas_frame)
-        entry_button_frame.pack(fill=tk.X, pady=(0, 5))
-        
-        self.artista_entry = ttk.Entry(entry_button_frame)
-        self.artista_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
-        self.artista_entry.bind('<Return>', self.adicionar_artista)
-        
-        ttk.Button(entry_button_frame, text="Adicionar", command=self.adicionar_artista, width=12).pack(side=tk.RIGHT)
-        
-        listbox_frame = ttk.Frame(artistas_frame)
-        listbox_frame.pack(fill=tk.BOTH, expand=True)
-        
-        self.artistas_listbox = tk.Listbox(listbox_frame, height=3)
-        self.artistas_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        
-        scrollbar_artistas = ttk.Scrollbar(listbox_frame, orient="vertical", command=self.artistas_listbox.yview)
-        scrollbar_artistas.pack(side=tk.RIGHT, fill=tk.Y)
-        self.artistas_listbox.configure(yscrollcommand=scrollbar_artistas.set)
-        
-        #botoes
-        botoes_frame = ttk.Frame(cadastro_frame)
-        botoes_frame.grid(row=3, column=3, sticky=tk.NE, padx=(5, 15), pady=(10, 5))
-        
-        self.botao_salvar = ttk.Button(botoes_frame, text="Salvar", command=self.salvar_obra, width=12)  # ← Adicionar self.
-        self.botao_salvar.pack(pady=(0, 5))
-        ttk.Button(botoes_frame, text="Cancelar", command=self.limpar_form, width=12).pack()
-        
-        #listagem de obras
-        listagem_frame = ttk.LabelFrame(self.root, text="Listagem de obras", padding=10)
-        listagem_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-        
-        #treeview
+        ttk.Button(botoes_imagem_frame, text="Selecionar", command=self.selecionar_imagem, width=9).grid(row=0, column=0, padx=(0,3))
+        ttk.Button(botoes_imagem_frame, text="Visualizar", command=self.visualizar_imagem, width=9).grid(row=0, column=1, padx=3)
+        ttk.Button(botoes_imagem_frame, text="Remover", command=self.remover_imagem, width=9).grid(row=0, column=2, padx=3)
+
+        # --- Linha 3: Artistas --- #
+        ttk.Label(frm_cadastro, text="Artista(s):").grid(row=2, column=6, sticky="w", padx=(10,5), pady=5)
+        self.botao_artistas = ttk.Button(frm_cadastro, text="Selecionar Artistas", command=self.abrir_selecionar_artistas)
+        self.botao_artistas.grid(row=2, column=7, sticky="ew", padx=5, pady=5)
+        self.label_artistas_selecionados = ttk.Label(frm_cadastro, text="Nenhum artista selecionado", wraplength=300, justify="left", foreground="gray")
+        self.label_artistas_selecionados.grid(row=3, column=0, columnspan=8, sticky="w", padx=10, pady=(0,5))
+
+        # --- Botões Salvar / Cancelar / Buscar --- #
+        btns_frame = ttk.Frame(frm_cadastro)
+        btns_frame.grid(row=0, column=8, rowspan=3, sticky="n", padx=10, pady=5)  # coluna 8 para não sobrepor
+
+        self.botao_salvar = ttk.Button(btns_frame, text="Salvar", command=self.salvar_obra, width=16)
+        self.botao_salvar.pack(pady=4)
+
+        ttk.Button(btns_frame, text="Cancelar", command=self.limpar_form, width=16).pack(pady=4)
+
+        ttk.Button(btns_frame, text="Buscar", command=self.carregar_obras, width=16).pack(pady=4)
+
+        # --- FRAME DE LISTAGEM ---
+        listagem_frame = ttk.LabelFrame(self.root, text="Listagem de Obras", padding=10)
+        listagem_frame.pack(fill="both", expand=True, padx=10, pady=5)
+        listagem_frame.columnconfigure(0, weight=1)
+        listagem_frame.rowconfigure(0, weight=1)
+
         colunas = ("ID", "Título", "Artista", "Tipo", "Ano", "Técnica", "Dimensões", "Localização", "Preço")
-        
-        self.tree = ttk.Treeview(listagem_frame, columns=colunas, show="headings", height=15)
-        
-        #config colunas
-        self.tree.heading("ID", text="ID")
-        self.tree.column("ID", width=50, stretch=False)
-        
-        self.tree.heading("Título", text="Título")
-        self.tree.column("Título", width=150)
-        
-        self.tree.heading("Artista", text="Artista")
-        self.tree.column("Artista", width=120)
-        
-        self.tree.heading("Tipo", text="Tipo")
-        self.tree.column("Tipo", width=100)
-        
-        self.tree.heading("Ano", text="Ano")
-        self.tree.column("Ano", width=60, stretch=False)
-        
-        self.tree.heading("Técnica", text="Técnica")
-        self.tree.column("Técnica", width=100)
-        
-        self.tree.heading("Dimensões", text="Dimensões")
-        self.tree.column("Dimensões", width=100)
-        
-        self.tree.heading("Localização", text="Localização")
-        self.tree.column("Localização", width=120)
-        
-        self.tree.heading("Preço", text="Preço")
-        self.tree.column("Preço", width=80)
-        
-        #scrollbars para treeview
-        v_scrollbar = ttk.Scrollbar(listagem_frame, orient="vertical", command=self.tree.yview)
-        h_scrollbar = ttk.Scrollbar(listagem_frame, orient="horizontal", command=self.tree.xview)
-        self.tree.configure(yscrollcommand=v_scrollbar.set, xscrollcommand=h_scrollbar.set)
-        
-        #posicionar treeview e scrollbars
+        self.tree = ttk.Treeview(listagem_frame, columns=colunas, show="headings")
+
+        style = ttk.Style()
+        style.configure("Treeview", bordercolor="#d0d0d0", relief="solid")
+
+        for c in colunas:
+            self.tree.heading(c, text=c)
+            self.tree.column(c, width=100, minwidth=50, anchor="w", stretch=True)
+
         self.tree.grid(row=0, column=0, sticky="nsew")
-        v_scrollbar.grid(row=0, column=1, sticky="ns")
-        h_scrollbar.grid(row=1, column=0, sticky="ew")
-        
-        #configurar expansao do frame de listagem
+
+        # Scrollbars
+        yscroll = ttk.Scrollbar(listagem_frame, orient="vertical", command=self.tree.yview)
+        xscroll = ttk.Scrollbar(listagem_frame, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(yscrollcommand=yscroll.set, xscrollcommand=xscroll.set)
+        yscroll.grid(row=0, column=1, sticky="ns")
+        xscroll.grid(row=1, column=0, sticky="ew")
+
         listagem_frame.grid_rowconfigure(0, weight=1)
         listagem_frame.grid_columnconfigure(0, weight=1)
-        
-        #bind para duplo clique
+
         self.tree.bind("<Double-1>", self.editar_obra)
-        
         self.carregar_obras()
     
     def selecionar_imagem(self):
@@ -372,9 +339,8 @@ class ObraView:
         self.preco_entry.delete(0, tk.END)
         self.preco_entry.insert(0, "0.00")
         self.status_combo.set("Disponível")
-        self.artista_entry.delete(0, tk.END)
-        
-        self.artistas_listbox.delete(0, tk.END)
+        self.artistas_selecionados = []
+        self.label_artistas_selecionados.config(text="Nenhum artista selecionado")
         
         self.imagem_path = None
         self.imagem_tk = None
@@ -472,7 +438,104 @@ class ObraView:
                     self.imagem_label.config(text=nome_arquivo[:15] + "..." if len(nome_arquivo) > 15 else nome_arquivo)
             else:
                 self.imagem_label.config(text="Imagem carregada")
+    
+    def carregar_artistas_disponiveis(self):
+            """Carrega artistas cadastrados no banco para seleção"""
+            try:
+                artistas = self.controller.listar_artistas()
+                self.artistas_listbox.delete(0, tk.END)
+                for artista in artistas:
+                    self.artistas_listbox.insert(tk.END, artista.nome)
+            except Exception as e:
+                messagebox.showerror("Erro", f"Erro ao carregar artistas: {str(e)}")
 
+    def obter_artistas(self):
+        """Retorna lista de artistas selecionados na listbox"""
+        selecionados = [self.artistas_listbox.get(i) for i in self.artistas_listbox.curselection()]
+        return selecionados
+        
+    def carregar_artistas_disponiveis(self):
+        """Carrega artistas cadastrados no banco para seleção no Listbox"""
+        try:
+            artistas = self.controller.listar_artistas()
+            self.artistas_listbox.delete(0, tk.END)
+            for artista in artistas:
+                self.artistas_listbox.insert(tk.END, artista.nome)
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro ao carregar artistas: {str(e)}")
+
+    def centralizar_janela(self, janela, largura, altura):
+        """Centraliza a janela na tela"""
+        largura_tela = janela.winfo_screenwidth()
+        altura_tela = janela.winfo_screenheight()
+        x = (largura_tela - largura) // 2
+        y = (altura_tela - altura) // 2
+        janela.geometry(f"{largura}x{altura}+{x}+{y}")
+
+    def abrir_selecionar_artistas(self):
+        # Cria a janela de seleção de artistas
+        janela_artistas = tk.Toplevel(self.root)
+        janela_artistas.title("Seleção de Artistas")
+        janela_artistas.transient(self.root)
+        janela_artistas.grab_set()
+
+        # Centralizar a janela
+        largura, altura = 500, 400
+        x = (self.root.winfo_screenwidth() // 2) - (largura // 2)
+        y = (self.root.winfo_screenheight() // 2) - (altura // 2)
+        janela_artistas.geometry(f"{largura}x{altura}+{x}+{y}")
+
+        # Treeview com colunas
+        colunas = ("ID", "Nome", "Nacionalidade", "Nascimento")
+        tree_artistas = ttk.Treeview(janela_artistas, columns=colunas, show="headings", selectmode="extended")
+        for col in colunas:
+            tree_artistas.heading(col, text=col)
+            tree_artistas.column(col, width=120, anchor="center")
+        tree_artistas.pack(fill=tk.BOTH, expand=True, padx=10, pady=(10, 5))
+
+        # Buscar artistas do manager/controller
+        artistas = self.manager.listar_artistas()  # Deve retornar instâncias de Artista
+        for artista in artistas:
+            tree_artistas.insert(
+                "",
+                tk.END,
+                values=(
+                    artista.id_artista,
+                    artista.nome,
+                    artista.nacionalidade,
+                    artista.nascimento
+                )
+            )
+
+        # Frame para botões
+        frame_botoes = ttk.Frame(janela_artistas)
+        frame_botoes.pack(pady=10)
+
+        # Função de confirmação
+        def confirmar_selecao():
+            itens = tree_artistas.selection()
+            selecionados = [tree_artistas.item(i, "values")[1] for i in itens]
+            self.artistas_selecionados = selecionados
+            texto = "Artistas Selecionados: " + ", ".join(self.artistas_selecionados) \
+                    if self.artistas_selecionados else "Nenhum artista selecionado"
+            self.label_artistas_selecionados.config(text=texto)
+            janela_artistas.destroy()
+
+        # Botões Confirmar e Cancelar
+        ttk.Button(frame_botoes, text="Confirmar Seleção", command=confirmar_selecao).pack(side="left", padx=10)
+        ttk.Button(frame_botoes, text="Cancelar", command=janela_artistas.destroy).pack(side="left", padx=10)
+
+    def voltar_inicio(self):
+        try:
+            from src.views.tela_inicial_view import TelaInicial
+        except Exception:
+            messagebox.showerror("Erro", "Não foi possível voltar à tela inicial (import).")
+            return
+
+        for w in self.root.winfo_children():
+            w.destroy()
+        TelaInicial(self.root, self.manager)
+    
     def run(self):
         """iniciar a aplicação"""
         self.root.mainloop()

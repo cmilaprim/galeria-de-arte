@@ -1,6 +1,6 @@
 import tkinter as tk
-from database.manager import DatabaseManager
-from views.tela_inicial_view import TelaInicial
+from src.database.manager import DatabaseManager
+from src.views.tela_inicial_view import TelaInicial
 
 def main():
     db_manager = DatabaseManager()

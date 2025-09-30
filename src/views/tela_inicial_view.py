@@ -1,8 +1,8 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-from views.obra_view import ObraView
-from views.artista_view import ArtistaView
-from views.transacao_view import TransacaoView
+from src.views.obra_view import ObraView
+from src.views.artista_view import ArtistaView
+from src.views.transacao_view import TransacaoView
 
 class TelaInicial:
     def __init__(self, root, manager):

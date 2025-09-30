@@ -12,7 +12,7 @@ except ImportError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "tkcalendar"])
     from tkcalendar import DateEntry
 
-from ..controllers.transacao_controller import TransacaoController
+from src.controllers.transacao_controller import TransacaoController
 
 class TransacaoView:
     def __init__(self, root, controller=None, manager=None):
@@ -36,13 +36,12 @@ class TransacaoView:
         try:
             locale.setlocale(locale.LC_ALL, 'pt_BR.UTF-8')
         except Exception:
-            # não fatal — usar fallback de formatação quando necessário
             pass
 
         self.criar_interface()
         self.carregar_transacoes()
 
-    # ------------------- Interface -------------------
+    # ------------------- Criação de widgets -------------------
     def criar_interface(self):
         bg = "#F3F4F6"
         self.root.configure(bg=bg)
@@ -320,7 +319,7 @@ class TransacaoView:
             text="Obras Selecionadas: " + ", ".join(self.obras_selecionadas) if self.obras_selecionadas else "Nenhuma obra selecionada"
         )
 
-    # ---------- Acessar DB com fallback flexível ----------
+    # ---------- Helpers para acessar DB com fallback flexível ----------
     def _fetch_obras_from_db(self, sql="SELECT id_obra, titulo, nome_artista, status FROM obras"):
         """
         Tenta vários caminhos para obter as obras:
@@ -461,12 +460,8 @@ class TransacaoView:
         ttk.Button(frame_botoes, text="Cancelar", command=janela_obras.destroy).pack(side="left", padx=10)
 
     def voltar_inicio(self):
-        """
-        Segue o mesmo padrão das outras views: não fecha o root, apenas reconstrói (ou instancia) a tela inicial
-        passando o manager para manter a sessão/DB.
-        """
         try:
-            from views.tela_inicial_view import TelaInicial
+            from src.views.tela_inicial_view import TelaInicial
         except Exception:
             messagebox.showerror("Erro", "Não foi possível voltar à tela inicial (import).")
             return

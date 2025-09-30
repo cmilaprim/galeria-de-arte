@@ -1,99 +1,125 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-from ..controllers.artista_controller import ArtistaController
+from src.controllers.artista_controller import ArtistaController
 
 NACIONALIDADES = ["Brasil","Argentina","Chile","Espanha","Portugal","França","Itália","Alemanha","Estados Unidos","Outro"]
 ESPECIALIDADES = ["Pintura","Escultura","Fotografia","Gravura","Instalação","Performance","Outros"]
 
 class ArtistaView:
-    def __init__(self):
-        self.controller = ArtistaController()
-        self.root = tk.Tk()
-        self.root.title("Cadastro de Artista")
-        self.root.geometry("1200x800")
-        self.root.minsize(1100, 700)
+    def __init__(self, root, controller=None, manager=None):
+        self.root = root
 
-        # tema claro
-        bg = "#F3F4F6"  # cinza bem claro
+        for w in self.root.winfo_children():
+            w.destroy()
+
+        self.controller = controller or ArtistaController()
+        self.manager = manager
+
+        self.root.title("Sistema de Gestão de Galeria de Arte")
+        self.root.geometry("800x600")
+        self.root.minsize(800, 600)
+
+        bg = "#F3F4F6"
         self.root.configure(bg=bg)
         style = ttk.Style()
-        style.theme_use("clam")
+        try: style.theme_use("clam")
+        except Exception: pass
         style.configure("TFrame", background=bg)
         style.configure("TLabelframe", background=bg)
         style.configure("TLabelframe.Label", background=bg)
         style.configure("TLabel", background=bg)
 
         self._id_atual = None
-        self._montar_ui()
+        self.criar_interface()
         self._carregar_lista()
 
-    def _montar_ui(self):
-        frm = ttk.LabelFrame(self.root, text="Cadastro de Artista", padding=10)
-        frm.pack(fill=tk.X, padx=10, pady=8)
+    def criar_interface(self):
+        # --- Frame de cadastro ---
+        frm_cadastro = ttk.LabelFrame(self.root, text="Cadastro de Artista", padding=10)
+        frm_cadastro.pack(fill="x", padx=10, pady=8)
 
-        for i in range(8):
-            frm.columnconfigure(i, weight=1)
+        for i in range(3):
+            frm_cadastro.columnconfigure(i, weight=1, uniform="col")
+        frm_cadastro.columnconfigure(3, weight=0)
 
-        # Nome
-        ttk.Label(frm, text="Nome:").grid(row=0, column=0, sticky="w")
-        self.nome = ttk.Entry(frm)
-        self.nome.grid(row=0, column=0, sticky="ew", padx=(50, 15), pady=(0, 15))
+        # Linha 1
+        ttk.Label(frm_cadastro, text="Nome:").grid(row=0, column=0, sticky="w", padx=(5,2), pady=5)
+        self.nome = ttk.Entry(frm_cadastro)
+        self.nome.grid(row=0, column=0, sticky="ew", padx=(70,10), pady=5)
 
-        # Nascimento
-        ttk.Label(frm, text="Nascimento (DD/MM/YYYY):").grid(row=0, column=1, sticky="w")
-        self.nascimento = ttk.Entry(frm)
-        self.nascimento.grid(row=0, column=1, sticky="ew", padx=(180, 15), pady=(0, 15))
+        ttk.Label(frm_cadastro, text="Nascimento (DD/MM/YYYY):").grid(row=0, column=1, sticky="w", padx=(5,2), pady=5)
+        self.nascimento = ttk.Entry(frm_cadastro)
+        self.nascimento.grid(row=0, column=1, sticky="ew", padx=(70,10), pady=5)
 
-        # Nacionalidade (combobox)
-        ttk.Label(frm, text="Nacionalidade:").grid(row=0, column=2, sticky="w")
-        self.nacionalidade = ttk.Combobox(frm, values=NACIONALIDADES, state="readonly")
-        self.nacionalidade.grid(row=0, column=2, sticky="ew", padx=(120, 15), pady=(0, 15))
+        ttk.Label(frm_cadastro, text="Nacionalidade:").grid(row=0, column=2, sticky="w", padx=(5,2), pady=5)
+        self.nacionalidade = ttk.Combobox(frm_cadastro, values=NACIONALIDADES, state="readonly")
+        self.nacionalidade.grid(row=0, column=2, sticky="ew", padx=(70,10), pady=5)
 
-        # Especialidade (combobox)
-        ttk.Label(frm, text="Especialidade:").grid(row=1, column=0, sticky="w")
-        self.especialidade = ttk.Combobox(frm, values=ESPECIALIDADES, state="readonly")
-        self.especialidade.grid(row=1, column=0, sticky="ew", padx=(110, 15), pady=(0, 15))
+        # Linha 2
+        ttk.Label(frm_cadastro, text="Especialidade:").grid(row=1, column=0, sticky="w", padx=(5,2), pady=5)
+        self.especialidade = ttk.Combobox(frm_cadastro, values=ESPECIALIDADES, state="readonly")
+        self.especialidade.grid(row=1, column=0, sticky="ew", padx=(90,10), pady=5)
 
-        # Status (combobox)
-        ttk.Label(frm, text="Status:").grid(row=1, column=1, sticky="w")
-        self.status = ttk.Combobox(frm, values=self.controller.get_status(), state="readonly")
-        self.status.grid(row=1, column=1, sticky="ew", padx=(60, 15), pady=(0, 15))
+        ttk.Label(frm_cadastro, text="Status:").grid(row=1, column=1, sticky="w", padx=(5,2), pady=5)
+        self.status = ttk.Combobox(frm_cadastro, values=self.controller.get_status(), state="readonly")
+        self.status.grid(row=1, column=1, sticky="ew", padx=(50,10), pady=5)
 
-        # Data cadastro
-        ttk.Label(frm, text="Data cadastro (DD/MM/YYYY):").grid(row=1, column=2, sticky="w")
-        self.data_cadastro = ttk.Entry(frm)
-        self.data_cadastro.grid(row=1, column=2, sticky="ew", padx=(210, 15), pady=(0, 15))
+        ttk.Label(frm_cadastro, text="Data cadastro:").grid(row=1, column=2, sticky="w", padx=(5,2), pady=5)
+        self.data_cadastro = ttk.Entry(frm_cadastro)
+        self.data_cadastro.grid(row=1, column=2, sticky="ew", padx=(100,10), pady=5)
 
-        # Biografia (Text com fundo branco)
-        ttk.Label(frm, text="Biografia:").grid(row=2, column=0, sticky="nw")
-        self.biografia = tk.Text(frm, height=5, bg="white", fg="black", insertbackground="black")
-        self.biografia.grid(row=2, column=0, columnspan=3, sticky="ew", padx=(70, 15), pady=(0, 5))
+        # Linha 3 - Biografia
+        ttk.Label(frm_cadastro, text="Biografia:").grid(row=2, column=0, sticky="nw", padx=(5,2), pady=5)
+        self.biografia = tk.Text(frm_cadastro, height=5, bg="white", fg="black", insertbackground="black")
+        self.biografia.grid(row=2, column=0, columnspan=3, sticky="nsew", padx=(70,10), pady=(0,5))
+        frm_cadastro.rowconfigure(2, weight=1)
 
-        # Botões (somente Salvar / Cancelar / Buscar)
-        btns = ttk.Frame(frm)
+        # --- Botões ---
+        btns = ttk.Frame(frm_cadastro)
         btns.grid(row=0, column=3, rowspan=3, sticky="n", padx=10)
+
+        # Botão Home (Voltar)
+        frame_home = tk.Frame(frm_cadastro, bg="#f0f0f0", width=0, height=0)
+        frame_home.place(relx=1, rely=0, x=15, y=-35, anchor="ne")
+        self.btn_home = tk.Button(
+            frame_home,
+            text="❌",
+            font=("Segoe UI Emoji", 10),
+            bd=0,
+            highlightthickness=0,
+            padx=0,
+            pady=0,
+            bg="#f0f0f0",
+            activebackground="#dddddd",
+            cursor="hand2",
+            command=self.voltar_inicio
+        )
+        self.btn_home.pack(expand=True, fill="both")
+
         ttk.Button(btns, text="Salvar", command=self._salvar, width=16).pack(pady=4)
-        ttk.Button(btns, text="Limpar", command=self._limpar, width=16).pack(pady=4)
+        ttk.Button(btns, text="Cancelar", command=self._limpar, width=16).pack(pady=4)
         ttk.Button(btns, text="Buscar", command=self._buscar, width=16).pack(pady=4)
 
-        # Lista
+        # --- Frame de listagem ---
         lista_frame = ttk.LabelFrame(self.root, text="Listagem de Artistas", padding=10)
-        lista_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(5, 10))
+        lista_frame.pack(fill="both", expand=True, padx=10, pady=(5,10))
+        lista_frame.columnconfigure(0, weight=1)
+        lista_frame.rowconfigure(0, weight=1)
 
         colunas = ("ID", "Nome", "Nascimento", "Nacionalidade", "Especialidade", "Status", "Data Cadastro")
         self.tree = ttk.Treeview(lista_frame, columns=colunas, show="headings")
-        for c, w in zip(colunas, (60, 220, 140, 160, 160, 100, 140)):
+        for c, w in zip(colunas, (60,220,140,160,160,100,140)):
             self.tree.heading(c, text=c)
             self.tree.column(c, width=w, anchor="w")
-        self.tree.pack(fill=tk.BOTH, expand=True)
+        self.tree.grid(row=0, column=0, sticky="nsew")
 
         yscroll = ttk.Scrollbar(lista_frame, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=yscroll.set)
-        yscroll.pack(side=tk.RIGHT, fill=tk.Y)
+        yscroll.grid(row=0, column=1, sticky="ns")
 
         self.tree.bind("<<TreeviewSelect>>", self._on_select)
 
-    # --- ações ---
+    # --- Ações ---
     def _salvar(self):
         ok, msg = self.controller.salvar(
             self._id_atual,
@@ -108,7 +134,7 @@ class ArtistaView:
         if ok:
             messagebox.showinfo("Artistas", msg)
             self._limpar()
-            self._carregar_lista()  # lista todos
+            self._carregar_lista()
         else:
             messagebox.showerror("Artistas", msg)
 
@@ -142,7 +168,6 @@ class ArtistaView:
         art = self.controller.carregar(vals[0])
         if not art: return
         self._id_atual = art.id_artista
-        # Preenche formulário para possível edição
         self.nome.delete(0, tk.END); self.nome.insert(0, art.nome)
         self.nascimento.delete(0, tk.END); self.nascimento.insert(0, art.nascimento)
         self.nacionalidade.set(art.nacionalidade)
@@ -161,5 +186,12 @@ class ArtistaView:
         self.data_cadastro.delete(0, tk.END)
         self.biografia.delete("1.0", tk.END)
 
-    def run(self):
-        self.root.mainloop()
+    def voltar_inicio(self):
+        try:
+            from src.views.tela_inicial_view import TelaInicial
+        except Exception:
+            messagebox.showerror("Erro", "Não foi possível voltar à tela inicial (import).")
+            return
+        for w in self.root.winfo_children():
+            w.destroy()
+        TelaInicial(self.root, self.manager)

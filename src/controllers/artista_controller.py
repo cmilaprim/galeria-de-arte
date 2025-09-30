@@ -1,6 +1,6 @@
 from datetime import datetime
-from ..database.manager import DatabaseManager
-from ..models.artista_model import Artista, StatusArtista
+from src.database.manager import DatabaseManager
+from src.models.artista_model import Artista, StatusArtista
 
 class ArtistaController:
     def __init__(self):

@@ -1,6 +1,6 @@
 from datetime import datetime
-from database.manager import DatabaseManager
-from ..models.transacao_model import Transacao, TiposTransacao
+from src.database.manager import DatabaseManager
+from src.models.transacao_model import Transacao, TiposTransacao
 
 class TransacaoController:
     def __init__(self):

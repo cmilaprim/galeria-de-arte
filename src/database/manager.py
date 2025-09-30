@@ -3,9 +3,9 @@ import os
 from datetime import datetime, date
 from contextlib import contextmanager
 from typing import Optional
-from models.obra_model import ObraDeArte, StatusObra
-from models.artista_model import Artista, StatusArtista
-from models.transacao_model import Transacao
+from src.models.obra_model import ObraDeArte, StatusObra
+from src.models.artista_model import Artista, StatusArtista
+from src.models.transacao_model import Transacao
 
 
 class DatabaseManager:

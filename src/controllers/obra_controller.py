@@ -1,6 +1,6 @@
 from datetime import date
-from ..models.obra_model import ObraDeArte, StatusObra
-from ..database.manager import DatabaseManager
+from src.models.obra_model import ObraDeArte, StatusObra
+from src.database.manager import DatabaseManager
 
 class ObraController:
     def __init__(self):
@@ -97,3 +97,6 @@ class ObraController:
     def get_status_obra(self):
         """retorna os status disponíveis para obras"""
         return [status.value for status in StatusObra]
+    
+    def listar_artistas(self):
+        return self.db_manager.listar_artistas()
