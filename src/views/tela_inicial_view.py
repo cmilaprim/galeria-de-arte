@@ -3,6 +3,7 @@ from tkinter import ttk, messagebox
 from src.views.obra_view import ObraView
 from src.views.artista_view import ArtistaView
 from src.views.transacao_view import TransacaoView
+from src.views.exposicao_view import ExposicaoView
 
 class TelaInicial:
     def __init__(self, root, manager):
@@ -108,7 +109,7 @@ class TelaInicial:
         self._open_view(TransacaoView)
 
     def abrir_exposicoes(self):
-        messagebox.showinfo("Clique", "Abrir Exposições ainda não implementado.")
+        self._open_view(ExposicaoView)
 
     def abrir_cronogramas(self):
         messagebox.showinfo("Clique", "Abrir Cronogramas ainda não implementado.")

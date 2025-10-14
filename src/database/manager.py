@@ -6,6 +6,9 @@ from typing import Optional
 from src.models.obra_model import ObraDeArte, StatusObra
 from src.models.artista_model import Artista, StatusArtista
 from src.models.transacao_model import Transacao
+from src.models.exposicao_model import Exposicao, StatusExposicao
+from src.models.participacao_exposicao_model import ParticipacaoExposicao
+
 
 
 class DatabaseManager:
@@ -77,6 +80,31 @@ class DatabaseManager:
                     data_cadastro TEXT NOT NULL,
                     observacoes TEXT,
                     obras TEXT
+                )
+            """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS exposicoes (
+                    id_exposicao INTEGER PRIMARY KEY AUTOINCREMENT,
+                    nome TEXT NOT NULL,
+                    tema TEXT,
+                    localizacao TEXT,
+                    status TEXT NOT NULL,
+                    data_inicio TEXT,
+                    data_fim TEXT,
+                    data_cadastro TEXT,
+                    descricao TEXT
+                )
+            """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS participacao_exposicao (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id_exposicao INTEGER NOT NULL,
+                    id_obra INTEGER NOT NULL,
+                    data_inclusao TEXT,
+                    observacao TEXT,
+                    UNIQUE(id_exposicao, id_obra),
+                    FOREIGN KEY(id_exposicao) REFERENCES exposicoes(id_exposicao),
+                    FOREIGN KEY(id_obra) REFERENCES obras(id_obra)
                 )
             """)
 
@@ -507,6 +535,204 @@ class DatabaseManager:
             c.execute(sql, tuple(params))
             rows = c.fetchall()
         return [self._row_to_artista(r) for r in rows]
+    
+
+    # ---------------------- MÉTODOS EXPOSIÇÕES ----------------------
+    def inserir_exposicao(self, exposicao):
+        sql = '''INSERT INTO exposicoes
+                 (nome, tema, localizacao, status, data_inicio, data_fim, data_cadastro, descricao)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)'''
+        valores = (
+            exposicao.nome,
+            exposicao.tema,
+            exposicao.localizacao,
+            exposicao.status.value,
+            exposicao.data_inicio,
+            exposicao.data_fim,
+            exposicao.data_cadastro,
+            exposicao.descricao
+        )
+        try:
+            with self.conectar() as con:
+                cur = con.cursor()
+                cur.execute(sql, valores)
+                con.commit()
+                return True, cur.lastrowid
+        except Exception as e:
+            return False, f"Erro ao inserir exposição: {e}"
+
+    def atualizar_exposicao(self, exposicao):
+        sql = '''UPDATE exposicoes SET
+                 nome = ?, tema = ?, localizacao = ?, status = ?, data_inicio = ?, data_fim = ?, data_cadastro = ?, descricao = ?
+                 WHERE id_exposicao = ?'''
+        valores = (
+            exposicao.nome,
+            exposicao.tema,
+            exposicao.localizacao,
+            exposicao.status.value,
+            exposicao.data_inicio,
+            exposicao.data_fim,
+            exposicao.data_cadastro,
+            exposicao.descricao,
+            exposicao.id_exposicao
+        )
+        try:
+            with self.conectar() as con:
+                cur = con.cursor()
+                cur.execute(sql, valores)
+                con.commit()
+                return True, "Exposição atualizada."
+        except Exception as e:
+            return False, f"Erro ao atualizar exposição: {e}"
+
+    def listar_exposicoes(self):
+        from src.models.exposicao_model import Exposicao, StatusExposicao
+        res = []
+        try:
+            with self.conectar() as con:
+                con.row_factory = __import__("sqlite3").Row
+                cur = con.cursor()
+                cur.execute("SELECT * FROM exposicoes ORDER BY id_exposicao ASC")
+                rows = cur.fetchall()
+                for r in rows:
+                    status_enum = next((s for s in StatusExposicao if s.value == r["status"]), StatusExposicao.PLANEJADA)
+                    e = Exposicao(
+                        r["id_exposicao"], r["nome"], r["tema"], r["localizacao"],
+                        status_enum, r["data_inicio"], r["data_fim"], r["data_cadastro"], r["descricao"]
+                    )
+                    res.append(e)
+        except Exception:
+            pass
+        return res
+
+    def obter_exposicao(self, id_exposicao):
+        from src.models.exposicao_model import Exposicao, StatusExposicao
+        try:
+            with self.conectar() as con:
+                con.row_factory = __import__("sqlite3").Row
+                cur = con.cursor()
+                cur.execute("SELECT * FROM exposicoes WHERE id_exposicao = ?", (id_exposicao,))
+                r = cur.fetchone()
+                if not r:
+                    return None
+                status_enum = next((s for s in StatusExposicao if s.value == r["status"]), StatusExposicao.PLANEJADA)
+                return Exposicao(
+                    r["id_exposicao"], r["nome"], r["tema"], r["localizacao"],
+                    status_enum, r["data_inicio"], r["data_fim"], r["data_cadastro"], r["descricao"]
+                )
+        except Exception:
+            return None
+    
+    def buscar_exposicoes(self, filtros: dict = None):
+        from src.models.exposicao_model import Exposicao, StatusExposicao
+
+        if not filtros:
+            return self.listar_exposicoes()
+
+        where_clauses = []
+        params = []
+        mapeamento = {
+            "nome": "nome",
+            "tema": "tema",
+            "localizacao": "localizacao",
+            "status": "status",
+            "data_inicio": "data_inicio",
+            "data_fim": "data_fim",
+            "data_cadastro": "data_cadastro",
+            "descricao": "descricao"
+        }
+
+        for key, val in filtros.items():
+            if key not in mapeamento or val is None or str(val).strip() == "":
+                continue
+            col = mapeamento[key]
+            # usa LIKE para flexibilidade; para datas você pode querer match exato, mas mantive LIKE
+            where_clauses.append(f"{col} LIKE ?")
+            params.append(f"%{val}%")
+
+        if not where_clauses:
+            return self.listar_exposicoes()
+
+        sql = "SELECT * FROM exposicoes WHERE " + " AND ".join(where_clauses) + " ORDER BY id_exposicao ASC"
+        res = []
+        try:
+            with self.conectar() as con:
+                con.row_factory = __import__("sqlite3").Row
+                cur = con.cursor()
+                cur.execute(sql, params)
+                rows = cur.fetchall()
+                for r in rows:
+                    status_enum = next((s for s in StatusExposicao if s.value == r["status"]), StatusExposicao.PLANEJADA)
+                    e = Exposicao(
+                        r["id_exposicao"],
+                        r["nome"],
+                        r["tema"],
+                        r["localizacao"],
+                        status_enum,
+                        r["data_inicio"],
+                        r["data_fim"],
+                        r["data_cadastro"],
+                        r["descricao"]
+                    )
+                    res.append(e)
+        except Exception:
+            # em caso de erro, retorne lista vazia (ou lançar/registrar)
+            return []
+        return res
+
+    
+    # ---------------------- MÉTODOS PARTICIPAÇÃO EM EXPOSIÇÃO ----------------------
+        # ===== Participações (obra <-> exposicao) =====
+    def inserir_participacao_exposicao(self, participacao):
+        sql = """INSERT OR IGNORE INTO participacao_exposicao
+                 (id_exposicao, id_obra, data_inclusao, observacao)
+                 VALUES (?, ?, ?, ?)"""
+        valores = (participacao.id_exposicao, participacao.id_obra, participacao.data_inclusao, participacao.observacao)
+        try:
+            with self.conectar() as con:
+                cur = con.cursor()
+                cur.execute(sql, valores)
+                con.commit()
+                return True, cur.lastrowid
+        except Exception as e:
+            return False, f"Erro ao inserir participação: {e}"
+
+    def remover_participacao_exposicao(self, id_exposicao, id_obra):
+        try:
+            with self.conectar() as con:
+                cur = con.cursor()
+                cur.execute("DELETE FROM participacao_exposicao WHERE id_exposicao = ? AND id_obra = ?", (id_exposicao, id_obra))
+                con.commit()
+                return True, "Participação removida."
+        except Exception as e:
+            return False, f"Erro ao remover participação: {e}"
+
+    def listar_participacoes_por_exposicao(self, id_exposicao):
+        try:
+            with self.conectar() as con:
+                con.row_factory = __import__("sqlite3").Row
+                cur = con.cursor()
+                cur.execute("""
+                    SELECT pe.id as participacao_id, pe.data_inclusao, pe.observacao,
+                           o.* 
+                    FROM participacao_exposicao pe
+                    JOIN obras o ON o.id_obra = pe.id_obra
+                    WHERE pe.id_exposicao = ?
+                    ORDER BY pe.id ASC
+                """, (id_exposicao,))
+                rows = cur.fetchall()
+                return rows
+        except Exception:
+            return []
+
+    def verificar_participacao(self, id_exposicao, id_obra):
+        try:
+            with self.conectar() as con:
+                cur = con.cursor()
+                cur.execute("SELECT 1 FROM participacao_exposicao WHERE id_exposicao = ? AND id_obra = ? LIMIT 1", (id_exposicao, id_obra))
+                return cur.fetchone() is not None
+        except Exception:
+            return False
 
 
 db = DatabaseManager()
