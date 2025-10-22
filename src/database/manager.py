@@ -2,14 +2,11 @@ import sqlite3
 import os
 from datetime import datetime, date
 from contextlib import contextmanager
-from typing import Optional
+from typing import Optional, Any
 from src.models.obra_model import ObraDeArte, StatusObra
 from src.models.artista_model import Artista, StatusArtista
 from src.models.transacao_model import Transacao
 from src.models.exposicao_model import Exposicao, StatusExposicao
-from src.models.participacao_exposicao_model import ParticipacaoExposicao
-
-
 
 class DatabaseManager:
     def __init__(self, db_file: Optional[str] = None):
@@ -535,7 +532,6 @@ class DatabaseManager:
             c.execute(sql, tuple(params))
             rows = c.fetchall()
         return [self._row_to_artista(r) for r in rows]
-    
 
     # ---------------------- MÉTODOS EXPOSIÇÕES ----------------------
     def inserir_exposicao(self, exposicao):
@@ -586,11 +582,10 @@ class DatabaseManager:
             return False, f"Erro ao atualizar exposição: {e}"
 
     def listar_exposicoes(self):
-        from src.models.exposicao_model import Exposicao, StatusExposicao
         res = []
         try:
             with self.conectar() as con:
-                con.row_factory = __import__("sqlite3").Row
+                con.row_factory = sqlite3.Row
                 cur = con.cursor()
                 cur.execute("SELECT * FROM exposicoes ORDER BY id_exposicao ASC")
                 rows = cur.fetchall()
@@ -606,10 +601,9 @@ class DatabaseManager:
         return res
 
     def obter_exposicao(self, id_exposicao):
-        from src.models.exposicao_model import Exposicao, StatusExposicao
         try:
             with self.conectar() as con:
-                con.row_factory = __import__("sqlite3").Row
+                con.row_factory = sqlite3.Row
                 cur = con.cursor()
                 cur.execute("SELECT * FROM exposicoes WHERE id_exposicao = ?", (id_exposicao,))
                 r = cur.fetchone()
@@ -624,8 +618,6 @@ class DatabaseManager:
             return None
     
     def buscar_exposicoes(self, filtros: dict = None):
-        from src.models.exposicao_model import Exposicao, StatusExposicao
-
         if not filtros:
             return self.listar_exposicoes()
 
@@ -646,7 +638,6 @@ class DatabaseManager:
             if key not in mapeamento or val is None or str(val).strip() == "":
                 continue
             col = mapeamento[key]
-            # usa LIKE para flexibilidade; para datas você pode querer match exato, mas mantive LIKE
             where_clauses.append(f"{col} LIKE ?")
             params.append(f"%{val}%")
 
@@ -657,7 +648,7 @@ class DatabaseManager:
         res = []
         try:
             with self.conectar() as con:
-                con.row_factory = __import__("sqlite3").Row
+                con.row_factory = sqlite3.Row
                 cur = con.cursor()
                 cur.execute(sql, params)
                 rows = cur.fetchall()
@@ -676,18 +667,47 @@ class DatabaseManager:
                     )
                     res.append(e)
         except Exception:
-            # em caso de erro, retorne lista vazia (ou lançar/registrar)
             return []
         return res
 
-    
     # ---------------------- MÉTODOS PARTICIPAÇÃO EM EXPOSIÇÃO ----------------------
-        # ===== Participações (obra <-> exposicao) =====
-    def inserir_participacao_exposicao(self, participacao):
+    def inserir_participacao_exposicao(self, participacao: Any = None, id_exposicao: Optional[int] = None,
+                                       id_obra: Optional[int] = None, data_inclusao: Optional[str] = None,
+                                       observacao: Optional[str] = None):
+        """
+        Insere uma participação. Aceita:
+         - um objeto/dict com atributos/chaves id_exposicao, id_obra, data_inclusao, observacao
+         - ou passar id_exposicao, id_obra (e opcionalmente data_inclusao, observacao) separadamente.
+        Retorna (True, lastrowid) ou (False, error_msg).
+        """
+        # Extrair valores de forma flexível
+        if participacao is not None and id_exposicao is None and id_obra is None:
+            # participacao pode ser dict-like ou objeto com atributos
+            try:
+                if isinstance(participacao, dict):
+                    id_exposicao = participacao.get("id_exposicao") or participacao.get("id_exposição") or participacao.get("id_expo")
+                    id_obra = participacao.get("id_obra") or participacao.get("obra_id") or participacao.get("id")
+                    data_inclusao = participacao.get("data_inclusao") or participacao.get("data")
+                    observacao = participacao.get("observacao") or participacao.get("obs")
+                else:
+                    # objeto com atributos
+                    id_exposicao = getattr(participacao, "id_exposicao", None) or getattr(participacao, "id_expo", None) or getattr(participacao, "id", None)
+                    id_obra = getattr(participacao, "id_obra", None) or getattr(participacao, "obra_id", None)
+                    data_inclusao = getattr(participacao, "data_inclusao", None) or getattr(participacao, "data", None)
+                    observacao = getattr(participacao, "observacao", None) or getattr(participacao, "obs", None)
+            except Exception:
+                pass
+
+        # validação básica
+        if id_exposicao is None or id_obra is None:
+            return False, "id_exposicao e id_obra são obrigatórios para inserir participação."
+
+        data_inclusao_val = data_inclusao or date.today().strftime("%d/%m/%Y")
+
         sql = """INSERT OR IGNORE INTO participacao_exposicao
                  (id_exposicao, id_obra, data_inclusao, observacao)
                  VALUES (?, ?, ?, ?)"""
-        valores = (participacao.id_exposicao, participacao.id_obra, participacao.data_inclusao, participacao.observacao)
+        valores = (int(id_exposicao), int(id_obra), data_inclusao_val, observacao)
         try:
             with self.conectar() as con:
                 cur = con.cursor()
@@ -710,7 +730,7 @@ class DatabaseManager:
     def listar_participacoes_por_exposicao(self, id_exposicao):
         try:
             with self.conectar() as con:
-                con.row_factory = __import__("sqlite3").Row
+                con.row_factory = sqlite3.Row
                 cur = con.cursor()
                 cur.execute("""
                     SELECT pe.id as participacao_id, pe.data_inclusao, pe.observacao,
@@ -734,5 +754,5 @@ class DatabaseManager:
         except Exception:
             return False
 
-
+# Instância global
 db = DatabaseManager()

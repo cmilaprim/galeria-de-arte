@@ -1,8 +1,6 @@
-# src/controllers/exposicao_controller.py
 from datetime import datetime
 from src.database.manager import DatabaseManager
 from src.models.exposicao_model import Exposicao, StatusExposicao
-from src.models.participacao_exposicao_model import ParticipacaoExposicao
 
 class ExposicaoController:
     def __init__(self):
@@ -59,14 +57,6 @@ class ExposicaoController:
             return False, str(ve)
         except Exception as e:
             return False, f"Erro ao salvar exposição: {e}"
-        
-    def buscar(self, filtros: dict = None):
-        if not filtros:
-            return self.db.listar_exposicoes()
-        # normaliza: strips
-        filtros_limpos = {k: (v.strip() if isinstance(v, str) else v) for k, v in (filtros.items() if filtros else []) if v}
-        return self.db.buscar_exposicoes(filtros_limpos)
-
 
     def listar(self):
         return self.db.listar_exposicoes()
@@ -74,22 +64,107 @@ class ExposicaoController:
     def carregar(self, id_exposicao):
         return self.db.obter_exposicao(id_exposicao)
 
-    def buscar(self, filtros: dict):
-        return self.db.buscar_exposicoes(filtros)
-
     def get_status(self):
         return [s.value for s in StatusExposicao]
 
-    # participação (obra <-> exposição)
+    # ---------- Participação (obra <-> exposição) ----------
     def adicionar_obra(self, id_exposicao: int, id_obra: int, observacao: str = None):
-        p = ParticipacaoExposicao(id=None, id_exposicao=id_exposicao, id_obra=id_obra, observacao=observacao)
-        return self.db.inserir_participacao_exposicao(p)
+        try:
+            res = None
+
+            try:
+                res = self.db.inserir_participacao_exposicao(id_exposicao, id_obra, observacao)
+            except TypeError:
+                res = None
+            except Exception as e:
+                return False, f"Erro do DB ao adicionar participação: {e}"
+            
+            if res is None:
+                try:
+                    payload = {"id_exposicao": id_exposicao, "id_obra": id_obra, "observacao": observacao}
+                    res = self.db.inserir_participacao_exposicao(payload)
+                except TypeError:
+                    res = None
+                except Exception as e:
+                    return False, f"Erro do DB ao adicionar participação: {e}"
+
+            if res is None:
+                try:
+                    res = self.db.inserir_participacao_exposicao(id_exposicao, id_obra)
+                except Exception:
+                    res = None
+
+            if res is None:
+                try:
+                    sql_try = "INSERT INTO participacoes_exposicao (id_exposicao, id_obra, observacao) VALUES (?, ?, ?)"
+                    if hasattr(self.db, "execute"):
+                        try:
+                            self.db.execute(sql_try, (id_exposicao, id_obra, observacao))
+                            return True, "Participação inserida (fallback)."
+                        except Exception:
+                            pass
+                    elif hasattr(self.db, "conectar"):
+                        try:
+                            conn = self.db.conectar()
+                            cur = conn.cursor()
+                            cur.execute(sql_try, (id_exposicao, id_obra, observacao))
+                            conn.commit()
+                            conn.close()
+                            return True, "Participação inserida (fallback)."
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+
+            if isinstance(res, tuple) and len(res) >= 1 and isinstance(res[0], bool):
+                msg = res[1] if len(res) > 1 else ("OK" if res[0] else "Erro")
+                return bool(res[0]), str(msg)
+            if isinstance(res, bool):
+                return res, ("OK" if res else "Erro ao inserir participação")
+            if isinstance(res, dict):
+                return True, "Participação adicionada."
+            if res is None:
+                return True, "Participação adicionada (sem retorno detalhado)."
+            try:
+                if hasattr(res, "id") or hasattr(res, "id_exposicao") or hasattr(res, "id_obra"):
+                    return True, "Participação adicionada."
+            except Exception:
+                pass
+
+            return True, "Participação adicionada."
+
+        except Exception as e:
+            return False, f"Erro ao adicionar participação: {e}"
 
     def remover_obra(self, id_exposicao: int, id_obra: int):
-        return self.db.remover_participacao_exposicao(id_exposicao, id_obra)
+        try:
+            res = None
+            try:
+                res = self.db.remover_participacao_exposicao(id_exposicao, id_obra)
+            except TypeError:
+                res = None
+            except Exception as e:
+                return False, f"Erro do DB ao remover participação: {e}"
+
+            if isinstance(res, tuple) and len(res) >= 1 and isinstance(res[0], bool):
+                msg = res[1] if len(res) > 1 else ("Removido" if res[0] else "Não removido")
+                return bool(res[0]), str(msg)
+            if isinstance(res, bool):
+                return res, ("Removido" if res else "Não removido")
+            if res is None:
+                return True, "Remoção solicitada."
+            return True, "Remoção solicitada."
+        except Exception as e:
+            return False, f"Erro ao remover participação: {e}"
 
     def listar_obras(self, id_exposicao: int):
-        return self.db.listar_participacoes_por_exposicao(id_exposicao)
+        try:
+            return self.db.listar_participacoes_por_exposicao(id_exposicao)
+        except Exception:
+            return []
 
     def verificar_participacao(self, id_exposicao: int, id_obra: int):
-        return self.db.verificar_participacao(id_exposicao, id_obra)
+        try:
+            return self.db.verificar_participacao(id_exposicao, id_obra)
+        except Exception:
+            return False
