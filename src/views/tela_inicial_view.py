@@ -3,7 +3,7 @@ from tkinter import ttk, messagebox
 from src.views.obra_view import ObraView
 from src.views.artista_view import ArtistaView
 from src.views.transacao_view import TransacaoView
-from src.views.cronograma_view import CronogramaView
+#from src.views.cronograma_view import CronogramaView
 from src.views.exposicao_view import ExposicaoView
 
 class TelaInicial:
