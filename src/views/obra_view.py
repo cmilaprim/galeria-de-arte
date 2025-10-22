@@ -31,43 +31,27 @@ class ObraView:
         # --- FRAME DE CADASTRO --- #
         frm_cadastro = ttk.LabelFrame(self.root, text="Cadastro de Obras", padding=10)
         frm_cadastro.pack(fill="x", padx=10, pady=8)
-        for i in range(8):
+        for i in range(9):
             frm_cadastro.columnconfigure(i, weight=1, uniform="col")
 
-        # --- Botão Home (Voltar) --- #
-        frame_home = tk.Frame(frm_cadastro, bg="#f0f0f0", width=0, height=0)
-        frame_home.place(relx=1, rely=0, x=15, y=-35, anchor="ne")
-        self.btn_home = tk.Button(
-            frame_home,
-            text="❌",
-            font=("Segoe UI Emoji", 10),
-            bd=0,
-            highlightthickness=0,
-            padx=0,
-            pady=0,
-            bg="#f0f0f0",
-            activebackground="#dddddd",
-            cursor="hand2",
-            command=self.voltar_inicio
-        )
-        self.btn_home.pack(expand=True, fill="both")
-
         # --- Linha 1: Ano, Título, Técnica, Dimensões --- #
-        campos = [("Ano:", "ano_entry", 15),
-                ("Título:", "titulo_entry", 25),
-                ("Técnica:", "tecnica_entry", 20),
-                ("Dimensões:", "dimensoes_entry", 20)]
+        campos = [
+            ("Título:", "titulo_entry", 25),
+            ("Ano:", "ano_entry", 15),
+            ("Técnica:", "tecnica_entry", 20),
+            ("Dimensões:", "dimensoes_entry", 20)
+        ]
         for idx, (label_text, attr_name, width) in enumerate(campos):
             col_label = idx * 2
             col_entry = idx * 2 + 1
             ttk.Label(frm_cadastro, text=label_text).grid(row=0, column=col_label, sticky="w", padx=(10,5), pady=5)
-            entry = ttk.Entry(frm_cadastro)  # sem width
+            entry = ttk.Entry(frm_cadastro)
             entry.grid(row=0, column=col_entry, sticky="ew", padx=(5,10), pady=5)
             setattr(self, attr_name, entry)
 
         # --- Linha 2: Tipo, Status, Localização, Preço --- #
         campos2 = [("Tipo:", "tipo_combo", self.controller.get_tipos_obra(), 1),
-                ("Status:", "status_combo", self.controller.get_status_obra(), 3),
+                ("Status:", "status_combo", [""] + self.controller.get_status_obra(), 3),
                 ("Localização:", "localizacao_entry", None, 5),
                 ("Preço:", "preco_entry", None, 7)]
         for label_text, attr_name, values, col in campos2:
@@ -92,23 +76,51 @@ class ObraView:
         ttk.Label(frm_cadastro, text="Imagem:").grid(row=2, column=2, sticky="w", padx=(10,5), pady=5)
         imagem_frame = ttk.Frame(frm_cadastro)
         imagem_frame.grid(row=2, column=3, columnspan=3, sticky="ew", padx=5, pady=5)
+        imagem_frame.columnconfigure(0, weight=1)
+
         self.preview_frame = ttk.Frame(imagem_frame)
         self.preview_frame.grid(row=0, column=0, padx=(0,10), sticky="w")
-        self.imagem_label = ttk.Label(self.preview_frame, text="Nenhuma imagem", relief="solid", width=20, anchor="center")
+
+        self.imagem_label = ttk.Label(
+            self.preview_frame,
+            text="Nenhuma imagem",
+            relief="solid",
+            width=22,
+            anchor="center"
+        )
         self.imagem_label.grid(row=0, column=0, pady=(0,5))
+
         botoes_imagem_frame = ttk.Frame(self.preview_frame)
         botoes_imagem_frame.grid(row=1, column=0, pady=5)
-        ttk.Button(botoes_imagem_frame, text="Selecionar", command=self.selecionar_imagem, width=9).grid(row=0, column=0, padx=(0,3))
-        ttk.Button(botoes_imagem_frame, text="Visualizar", command=self.visualizar_imagem, width=9).grid(row=0, column=1, padx=3)
-        ttk.Button(botoes_imagem_frame, text="Remover", command=self.remover_imagem, width=9).grid(row=0, column=2, padx=3)
+        ttk.Button(botoes_imagem_frame, text="Selecionar", command=self.selecionar_imagem, width=10).grid(row=0, column=0, padx=(0,4))
+        ttk.Button(botoes_imagem_frame, text="Visualizar", command=self.visualizar_imagem, width=10).grid(row=0, column=1, padx=4)
+        ttk.Button(botoes_imagem_frame, text="Remover", command=self.remover_imagem, width=10).grid(row=0, column=2, padx=4)
 
         # --- Linha 3: Artistas --- #
         ttk.Label(frm_cadastro, text="Artista(s):").grid(row=2, column=6, sticky="w", padx=(10,5), pady=5)
-        self.botao_artistas = ttk.Button(frm_cadastro, text="Selecionar Artistas", command=self.abrir_selecionar_artistas)
+        self.botao_artistas = ttk.Button(frm_cadastro, text="Selecionar Artistas", command=self.abrir_selecionar_artistas, width=18)
         self.botao_artistas.grid(row=2, column=7, sticky="ew", padx=5, pady=5)
         self.label_artistas_selecionados = ttk.Label(frm_cadastro, text="Nenhum artista selecionado", wraplength=300, justify="left", foreground="gray")
         self.label_artistas_selecionados.grid(row=3, column=0, columnspan=8, sticky="w", padx=10, pady=(0,5))
 
+        # --- Botão Home (Voltar) --- #
+        frame_home = tk.Frame(frm_cadastro, bg="#f0f0f0", width=0, height=0)
+        frame_home.place(relx=1, rely=0, x=15, y=-35, anchor="ne")
+        self.btn_home = tk.Button(
+            frame_home,
+            text="❌",
+            font=("Segoe UI Emoji", 10),
+            bd=0,
+            highlightthickness=0,
+            padx=0,
+            pady=0,
+            bg="#f0f0f0",
+            activebackground="#dddddd",
+            cursor="hand2",
+            command=self.voltar_inicio
+        )
+        self.btn_home.pack(expand=True, fill="both")
+        
         # --- Botões Salvar / Cancelar / Buscar --- #
         btns_frame = ttk.Frame(frm_cadastro)
         btns_frame.grid(row=0, column=8, rowspan=3, sticky="n", padx=10, pady=5)
@@ -237,16 +249,17 @@ class ObraView:
             dimensoes = self.dimensoes_entry.get().strip()
             localizacao = self.localizacao_entry.get().strip()
             preco = self.preco_entry.get().strip()
-            status_str = self.status_combo.get()
+            status = StatusObra.DISPONIVEL
 
             if not artistas:
                 messagebox.showerror("Erro", "Adicione pelo menos um artista")
                 return
 
-            status = next((s for s in StatusObra if s.value == status_str), StatusObra.DISPONIVEL)
             artista_str = ", ".join(artistas)
 
             if hasattr(self, 'obra_em_edicao') and self.obra_em_edicao:
+                # ao editar, mantém o status atual
+                status = self.obra_em_edicao.status
                 sucesso, mensagem = self.controller.atualizar_obra(
                     self.obra_em_edicao.id_obra, titulo, ano, artista_str, tipo, 
                     tecnica, dimensoes, localizacao, preco, status, self.imagem_path
@@ -276,7 +289,7 @@ class ObraView:
         self.localizacao_entry.delete(0, tk.END)
         self.preco_entry.delete(0, tk.END)
         self.preco_entry.insert(0, "0.00")
-        self.status_combo.set("Disponível")
+        self.status_combo.set("")  # Combobox vazio
 
         self.artistas_selecionados = []
         self.label_artistas_selecionados.config(text="Nenhum artista selecionado")
@@ -343,6 +356,7 @@ class ObraView:
         self.localizacao_entry.insert(0, obra.localizacao or "")
         self.preco_entry.delete(0, tk.END)
         self.preco_entry.insert(0, str(obra.preco))
+        # mantém status atual da obra ao editar
         self.status_combo.set(obra.status.value)
 
         if obra.data_cadastro:
