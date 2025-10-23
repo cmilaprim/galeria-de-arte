@@ -176,12 +176,17 @@ class TransacaoView:
         listagem_frame.columnconfigure(0, weight=1)
         listagem_frame.rowconfigure(0, weight=1)
 
+        # --- Botão Registrar Devolução --- #
+        btn_devolucao = ttk.Button(listagem_frame, text="Registrar Devolução", command=self.abrir_devolucao, width=18)
+        btn_devolucao.place(relx=1.0, x=-20, y=-6, anchor="ne")
+
+        # --- Treeview --- #
         colunas = ("ID","Cliente","Valor","Tipo","Data Transação","Data Cadastro","Observações","Obra(s)")
         self.tree = ttk.Treeview(listagem_frame, columns=colunas, show="headings")
         for c, w in zip(colunas, (60,200,100,100,90,90,150,150)):
             self.tree.heading(c, text=c)
             self.tree.column(c, width=w, anchor="w")
-        self.tree.grid(row=0, column=0, sticky="nsew")
+        self.tree.grid(row=0, column=0, sticky="nsew", padx=0, pady=(30, 0))
 
         # Scrollbars
         yscroll = ttk.Scrollbar(listagem_frame, orient="vertical", command=self.tree.yview)
