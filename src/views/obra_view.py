@@ -127,7 +127,7 @@ class ObraView:
         self.botao_salvar = ttk.Button(btns_frame, text="Salvar", command=self.salvar_obra, width=16)
         self.botao_salvar.pack(pady=4)
         ttk.Button(btns_frame, text="Cancelar", command=self.limpar_form, width=16).pack(pady=4)
-        ttk.Button(btns_frame, text="Buscar", command=self.carregar_obras, width=16).pack(pady=4)
+        #ttk.Button(btns_frame, text="Buscar", command=self.carregar_obras, width=16).pack(pady=4)
 
         # --- FRAME DE LISTAGEM --- #
         listagem_frame = ttk.LabelFrame(self.root, text="Listagem de Obras", padding=10)

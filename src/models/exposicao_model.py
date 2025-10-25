@@ -1,4 +1,3 @@
-# src/models/exposicao_model.py
 from enum import Enum
 from datetime import date
 
