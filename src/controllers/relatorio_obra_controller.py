@@ -41,8 +41,8 @@ class RelatorioController:
             ano_int = int(ano)
             ano_atual = datetime.now().year
             
-            if ano_int > ano_atual + 1:  
-                raise ValueError(f"Ano inválido: não pode ser posterior a {ano_atual + 1}")
+            if ano_int > ano_atual:  
+                raise ValueError(f"Ano inválido: não pode ser posterior a {ano_atual}")
                 
             return ano_int
         except ValueError as e:

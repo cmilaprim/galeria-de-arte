@@ -94,15 +94,15 @@ class RelatorioObrasView(tk.Toplevel):
         self.results_tree.configure(yscrollcommand=scrollbar.set)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        self._carregar_artistas()
-        self._carregar_transacoes()
+        self.carregar_artistas()
+        self.carregar_transacoes()
 
-    def _carregar_artistas(self):
+    def carregar_artistas(self):
         for i in self.artistas_tree.get_children(): self.artistas_tree.delete(i)
         for a in self.controller.listar_artistas():
             self.artistas_tree.insert("", tk.END, values=(getattr(a, "id_artista", None), getattr(a, "nome", "")))
 
-    def _carregar_transacoes(self):
+    def carregar_transacoes(self):
         for i in self.transacoes_tree.get_children(): self.transacoes_tree.delete(i)
         for t in self.controller.listar_transacoes():
             valor = getattr(t, "valor", 0.0)
