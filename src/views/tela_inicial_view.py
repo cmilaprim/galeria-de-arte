@@ -5,6 +5,8 @@ from src.views.artista_view import ArtistaView
 from src.views.transacao_view import TransacaoView
 #from src.views.cronograma_view import CronogramaView
 from src.views.exposicao_view import ExposicaoView
+from src.views.relatorio_obra_view import RelatorioObrasView
+
 
 class TelaInicial:
     def __init__(self, root, manager):
@@ -117,7 +119,7 @@ class TelaInicial:
         #self._open_view(CronogramaView)
 
     def abrir_relatorios(self):
-        messagebox.showinfo("Clique", "Abrir Relatórios ainda não implementado.")
+        self._open_view(RelatorioObrasView)
 
     def fazer_backup(self):
         messagebox.showinfo("Backup", "Backup ainda não implementado.")

@@ -1,8 +1,5 @@
 import sys
 import os
-# Adiciona o diretório raiz do projeto ao sys.path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
-
 import tkinter as tk
 from tkinter import ttk, messagebox
 from datetime import datetime
@@ -11,8 +8,9 @@ from typing import List
 from src.controllers.relatorio_obra_controller import RelatorioController
 from src.models.obra_model import StatusObra
 class RelatorioObrasView(tk.Toplevel):
-    def __init__(self, parent):
+    def __init__(self, parent, manager=None):
         super().__init__(parent)
+        self.manager = manager
         self.title("Relatório de Obras")
         self.geometry("1100x700")
         self.resizable(True, True)
@@ -190,7 +188,7 @@ class RelatorioObrasView(tk.Toplevel):
             messagebox.showerror("Erro de validação", str(e))
 
 # execução independente para teste
-if __name__ == "__main__":
-    root = tk.Tk(); root.withdraw()
-    w = RelatorioObrasView(root)
-    root.mainloop()
+#if __name__ == "__main__":
+#    root = tk.Tk(); root.withdraw()
+#    w = RelatorioObrasView(root)
+#    root.mainloop()
