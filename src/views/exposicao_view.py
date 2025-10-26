@@ -58,7 +58,7 @@ class ExposicaoView:
                                   command=self.voltar_inicio)
         self.btn_home.pack(expand=True, fill="both")
 
-        # right-side buttons
+        # --- Botões Salvar / Cancelar / Buscar --- #
         btn_frame = ttk.Frame(frm_top); btn_frame.grid(row=0, column=8, rowspan=3, sticky="n", padx=8, pady=4)
         ttk.Button(btn_frame, text="Salvar", command=self._salvar, width=18).pack(pady=6)
         ttk.Button(btn_frame, text="Cancelar", command=self._limpar, width=18).pack(pady=6)
@@ -81,7 +81,7 @@ class ExposicaoView:
         self._id_atual = None; self._prev_status = None; self._prev_start = None; self._prev_end = None
         self._carregar_lista(); self.tree.bind("<Double-1>", self._on_duplo)
 
-    # ---------------- helpers compactos ----------------
+    # ---------------- helpers ----------------
     def _parse_data(self, s: str) -> Optional[date]:
         if not s: return None
         for fmt in ("%d/%m/%Y","%Y-%m-%d"):
@@ -111,7 +111,7 @@ class ExposicaoView:
                 if hasattr(self.manager, "conectar"):
                     conn = self.manager.conectar(); cur = conn.cursor(); cur.execute(sql, params); conn.commit(); conn.close(); return True
                 if hasattr(self.manager, "cursor"):
-                    with self.manager.cursor() as c: c.execute(sql, params); 
+                    with self.manager.cursor() as c: c.execute(sql, params);
                     try: self.manager.commit()
                     except Exception: pass
                     return True
@@ -176,7 +176,7 @@ class ExposicaoView:
                         with dbobj.cursor() as c: c.execute(q, params); row = c.fetchone()
                         if row: return self._normalizar_status(row[0])
                     else:
-                        conn = self.manager.conectar(); cur = conn.cursor(); cur.execute(q, params); row = cur.fetchone(); conn.close(); 
+                        conn = self.manager.conectar(); cur = conn.cursor(); cur.execute(q, params); row = cur.fetchone(); conn.close();
                         if row: return self._normalizar_status(row[0])
         except Exception: pass
         return ""
@@ -185,7 +185,7 @@ class ExposicaoView:
         if status_raw is None: return ""
         try:
             if hasattr(status_raw, "value") and isinstance(status_raw.value, str):
-                s = status_raw.value.strip(); 
+                s = status_raw.value.strip();
                 if s: return s
         except Exception: pass
         try:
@@ -200,8 +200,10 @@ class ExposicaoView:
                     try:
                         ex_id = getattr(ex,"id_exposicao",None) or (ex.get("id_exposicao") if isinstance(ex,dict) else ex["id_exposicao"])
                         if exclude_expo_id and int(ex_id)==int(exclude_expo_id): continue
-                        s = self._parse_data(getattr(ex,"data_inicio",None) or (ex.get("data_inicio") if isinstance(ex,dict) else None)) 
-                        e = self._parse_data(getattr(ex,"data_fim",None) or (ex.get("data_fim") if isinstance(ex,dict) else None))
+                        s_raw = getattr(ex,"data_inicio",None) or (ex.get("data_inicio") if isinstance(ex,dict) else None)
+                        e_raw = getattr(ex,"data_fim",None) or (ex.get("data_fim") if isinstance(ex,dict) else None)
+                        s = self._parse_data(str(s_raw)) if s_raw else None
+                        e = self._parse_data(str(e_raw)) if e_raw else None
                         if s and e and inicio and fim:
                             if not (e < inicio or s > fim): return True
                         else:
@@ -239,9 +241,21 @@ class ExposicaoView:
     def _obra_em_qualquer_exposicao_ativa_hoje(self, id_obra:int, exclude_expo_id:Optional[int]=None) -> bool:
         hoje = date.today(); return self._obra_ocupada_em_periodo(id_obra, hoje, hoje, exclude_expo_id=exclude_expo_id)
 
+    def _obra_efetivamente_disponivel(self, id_obra:int, periodo_inicio:Optional[date], periodo_fim:Optional[date], exclude_expo_id:Optional[int]=None) -> bool:
+        status_db = self._get_status_da_obra(id_obra).strip().lower() if self._get_status_da_obra(id_obra) else ""
+        if not status_db:
+            ocupado = self._obra_ocupada_em_periodo(id_obra, periodo_inicio, periodo_fim, exclude_expo_id=exclude_expo_id)
+            return not ocupado
+        if "dispon" in status_db:
+            return True
+        if "em expos" in status_db or "em_expos" in status_db or "emexposicao" in status_db:
+            ocupado = self._obra_ocupada_em_periodo(id_obra, periodo_inicio, periodo_fim, exclude_expo_id=exclude_expo_id)
+            return not ocupado
+        return False
+
     def _buscar(self):
         filtros = {}
-        def put(k,val): 
+        def put(k,val):
             if val: filtros[k]=val
         put("nome", self.entry_nome.get().strip()); put("tema", self.entry_tema.get().strip()); put("localizacao", self.entry_local.get().strip())
         put("status", self.entry_status.get().strip()); put("data_inicio", self.entry_data_inicio.get().strip()); put("data_fim", self.entry_data_fim.get().strip())
@@ -295,7 +309,7 @@ class ExposicaoView:
                             pid = getattr(p,"id_obra",None) or (p.get("id_obra") if isinstance(p, dict) else p["id_obra"])
                             if pid is None: continue
                             if not self._obra_em_qualquer_exposicao_ativa_hoje(int(pid), exclude_expo_id=id_ex):
-                                self._set_obra_status(int(pid), "Disponível")
+                                pass
                         except Exception: continue
             except Exception: pass
 
@@ -344,7 +358,7 @@ class ExposicaoView:
         except Exception: pass
 
     def _on_duplo(self, event):
-        sel = self.tree.selection(); 
+        sel = self.tree.selection();
         if not sel: return
         vals = self.tree.item(sel)["values"]
         if not vals: return
@@ -387,9 +401,17 @@ class ExposicaoView:
         sel = self.tree.selection()
         if not sel:
             messagebox.showwarning("Aviso", "Selecione uma exposição para adicionar obras."); return
-        id_exposicao = int(self.tree.item(sel)["values"][0])
-        data_inicio_str = self.entry_data_inicio.get().strip(); data_fim_str = self.entry_data_fim.get().strip()
-        data_inicio = self._parse_data(data_inicio_str); data_fim = self._parse_data(data_fim_str)
+        row = self.tree.item(sel)["values"]
+        try:
+            id_exposicao = int(row[0])
+        except Exception:
+            messagebox.showerror("Erro", "ID de exposição inválido."); return
+
+        data_inicio_str = row[5] if len(row) > 5 else self.entry_data_inicio.get().strip()
+        data_fim_str = row[6] if len(row) > 6 else self.entry_data_fim.get().strip()
+        data_inicio = self._parse_data(data_inicio_str)
+        data_fim = self._parse_data(data_fim_str)
+
         status_atual = self._compute_status_from_dates(data_inicio_str, data_fim_str)
         if status_atual == "Finalizada":
             messagebox.showerror("Erro", "Não é possível adicionar obras a uma exposição finalizada."); return
@@ -402,7 +424,8 @@ class ExposicaoView:
         frame = ttk.Frame(win, padding=10); frame.pack(fill="both", expand=True)
         cols = ("id","titulo","artista","status")
         tree = ttk.Treeview(frame, columns=cols, show="headings", selectmode="extended")
-        for c,w in [("id",60),("titulo",460),("artista",200),("status",120)]: tree.heading(c,text=c.title()); tree.column(c,anchor="w", width=w)
+        for c,w in [("id",60),("titulo",460),("artista",200),("status",120)]:
+            tree.heading(c,text=c.title()); tree.column(c,anchor="w", width=w)
         tree.pack(fill="both", expand=True, padx=6, pady=(6,4))
         try:
             tree.tag_configure("in_exposicao", background="#E8F6E8"); tree.tag_configure("busy", background="#F8E8E8")
@@ -416,29 +439,6 @@ class ExposicaoView:
         ttk.Button(left_frame, text="Cancelar", command=win.destroy).pack(side="left", padx=8)
         ttk.Button(right_frame, text="Remover", command=lambda: toggle_remover(), width=14).pack(side="right", padx=6)
         ttk.Button(right_frame, text="Adicionar", command=lambda: toggle_adicionar(), width=14).pack(side="right", padx=6)
-
-        # sincroniza exposicoes finalizadas (libera obras)
-        try:
-            expos = self.controller.listar() or []
-        except Exception: expos = []
-        hoje = date.today()
-        for ex in expos:
-            try:
-                ex_id = getattr(ex,"id_exposicao",None) or (ex.get("id_exposicao") if isinstance(ex,dict) else ex["id_exposicao"])
-                inicio = getattr(ex,"data_inicio",None) or (ex.get("data_inicio") if isinstance(ex,dict) else None)
-                fim = getattr(ex,"data_fim",None) or (ex.get("data_fim") if isinstance(ex,dict) else None)
-                si = self._parse_data(str(inicio)) if inicio else None; sf = self._parse_data(str(fim)) if fim else None
-                if si and sf and hoje > sf:
-                    try: obras = self.controller.listar_obras(ex_id) or []
-                    except Exception: obras = []
-                    for p in obras:
-                        try:
-                            pid = getattr(p,"id_obra",None) or (p.get("id_obra") if isinstance(p,dict) else p["id_obra"])
-                            if pid is None: continue
-                            if not self._obra_em_qualquer_exposicao_ativa_hoje(int(pid), exclude_expo_id=ex_id):
-                                self._set_obra_status(int(pid), "Disponível")
-                        except Exception: continue
-            except Exception: continue
 
         def carregar():
             nonlocal initial_participacao_ids
@@ -458,15 +458,15 @@ class ExposicaoView:
                 except Exception: obras = []
 
             for o in obras:
-                try:
-                    oid = getattr(o,"id_obra",None) or (o.get("id_obra") if isinstance(o,dict) else o["id_obra"])
+                try: oid = getattr(o,"id_obra",None) or (o.get("id_obra") if isinstance(o,dict) else o["id_obra"])
                 except Exception: oid = ""
                 try: titulo = getattr(o,"titulo",None) or (o.get("titulo") if isinstance(o,dict) else str(o))
                 except Exception: titulo = str(o)
                 artista = ""
                 try:
                     if hasattr(o,"artista") and o.artista is not None:
-                        a = o.artista; artista = a if isinstance(a,str) else (getattr(a,"nome",None) or getattr(a,"name",None) or str(a))
+                        a = o.artista
+                        artista = a if isinstance(a,str) else (getattr(a,"nome",None) or getattr(a,"name",None) or str(a))
                     else:
                         if isinstance(o,dict): artista = o.get("nome_artista") or o.get("artista") or ""
                         else: artista = getattr(o,"nome_artista","") or getattr(o,"artista","") or ""
@@ -476,13 +476,18 @@ class ExposicaoView:
                 except Exception: status_db = ""
                 status_display = status_db
                 try:
-                    if oid and int(oid) in participacao_ids: status_display = "Em Exposição"
+                    if oid and int(oid) in participacao_ids:
+                        status_display = "Em Exposição"
                     else:
                         if data_inicio and data_fim:
                             ocupado = self._obra_ocupada_em_periodo(int(oid), data_inicio, data_fim, exclude_expo_id=id_exposicao)
                             status_display = "Em Exposição" if ocupado else "Disponível"
                         else:
-                            status_display = status_db or status_display
+                            if status_db and status_db.lower().startswith("em expos"):
+                                ocupado_hoje = self._obra_em_qualquer_exposicao_ativa_hoje(int(oid), exclude_expo_id=id_exposicao)
+                                status_display = "Em Exposição" if ocupado_hoje else "Disponível"
+                            else:
+                                status_display = status_db or status_display
                 except Exception: status_display = status_db
 
                 tag = ""; display_titulo = titulo
@@ -506,9 +511,9 @@ class ExposicaoView:
                     values = tree.item(item, "values"); id_obra = int(values[0])
                     if id_obra in initial_participacao_ids:
                         messagebox.showinfo("Info", f"Obra ID {id_obra} já está vinculada à exposição."); continue
-                    status_atual = self._get_status_da_obra(id_obra).lower() if self._get_status_da_obra(id_obra) else ""
-                    if status_atual != "disponível":
-                        messagebox.showwarning("Atenção", f"Obra ID {id_obra} não pode ser marcada para adicionar (status atual: {status_atual or 'desconhecido'})."); continue
+                    disponivel = self._obra_efetivamente_disponivel(id_obra, data_inicio, data_fim, exclude_expo_id=id_exposicao)
+                    if not disponivel:
+                        messagebox.showwarning("Atenção", f"Obra ID {id_obra} não pode ser marcada para adicionar (não disponível)."); continue
                     if id_obra in to_add: to_add.remove(id_obra)
                     else:
                         if id_obra in to_remove: to_remove.remove(id_obra)
@@ -562,9 +567,10 @@ class ExposicaoView:
             # adicionar
             for id_obra in list(to_add):
                 try:
-                    status_fresco = self._get_status_da_obra(id_obra).lower() if self._get_status_da_obra(id_obra) else ""
-                    if status_fresco != "disponível":
-                        messagebox.showwarning("Atenção", f"Obra ID {id_obra} não está disponível (status atual: {status_fresco or 'desconhecido'}). Não será adicionada."); continue
+                    disponivel = self._obra_efetivamente_disponivel(id_obra, data_inicio, data_fim, exclude_expo_id=id_exposicao)
+                    if not disponivel:
+                        messagebox.showwarning("Atenção", f"Obra ID {id_obra} não está disponível. Não será adicionada."); continue
+
                     ocupado = False
                     if data_inicio and data_fim: ocupado = self._obra_ocupada_em_periodo(id_obra, data_inicio, data_fim, exclude_expo_id=id_exposicao)
                     else: ocupado = self._obra_ocupada_em_periodo(id_obra, None, None, exclude_expo_id=id_exposicao)
@@ -601,8 +607,7 @@ class ExposicaoView:
             win.destroy(); self._carregar_lista()
 
         carregar()
-        try:
-            win.deiconify()
+        try: win.deiconify()
         except Exception: pass
         win.wait_window()
 

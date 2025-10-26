@@ -168,7 +168,7 @@ class TransacaoView:
         btns_frame.grid(row=0, column=8, rowspan=4, sticky="n", padx=10, pady=5)
         ttk.Button(btns_frame, text="Salvar", command=self.salvar_transacao, width=16).pack(pady=4)
         ttk.Button(btns_frame, text="Cancelar", command=self.limpar_campos, width=16).pack(pady=4)
-        ttk.Button(btns_frame, text="Buscar", command=self.carregar_transacoes, width=16).pack(pady=4)
+        #ttk.Button(btns_frame, text="Buscar", command=self.carregar_transacoes, width=16).pack(pady=4)
 
         # --- FRAME DE LISTAGEM --- #
         listagem_frame = ttk.LabelFrame(self.root, text="Listagem de Transações", padding=10)
