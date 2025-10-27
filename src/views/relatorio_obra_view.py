@@ -1,7 +1,5 @@
 import sys
 import os
-# Adiciona o diretório raiz do projeto ao sys.path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
 import tkinter as tk
 from tkinter import ttk, messagebox
@@ -10,25 +8,19 @@ from typing import List
 
 from src.controllers.relatorio_obra_controller import RelatorioController
 from src.models.obra_model import StatusObra
-class RelatorioObrasView(tk.Toplevel):
-    def __init__(self, parent):
+class RelatorioObrasView(tk.Frame):
+    def __init__(self, parent, manager=None):
         super().__init__(parent)
-        self.title("Relatório de Obras")
-        self.geometry("1100x700")
-        self.resizable(True, True)
-
+        self.parent = parent
+        self.manager = manager
         self.controller = RelatorioController()
-        self._create_widgets()
-        self._center_window()
+        
+        parent.title("Relatório de Obras")
+        self.pack(fill=tk.BOTH, expand=True)
+        self.create_widgets()
 
-    def _center_window(self):
-        self.update_idletasks()
-        w = self.winfo_width(); h = self.winfo_height()
-        x = (self.winfo_screenwidth() // 2) - (w // 2)
-        y = (self.winfo_screenheight() // 2) - (h // 2)
-        self.geometry(f"{w}x{h}+{x}+{y}")
 
-    def _create_widgets(self):
+    def create_widgets(self):
         main = ttk.Frame(self, padding=8)
         main.pack(fill=tk.BOTH, expand=True)
 
@@ -87,6 +79,7 @@ class RelatorioObrasView(tk.Toplevel):
         cols = ("id","titulo","artista","tipo","ano","tecnica","status","transacao","localizacao","valor")
         self.results_tree = ttk.Treeview(results_frame, columns=cols, show="headings")
         headings = ["ID","Título","Artista","Tipo","Ano","Técnica","Status","Transação","Localização","Valor"]
+        
         for c,h in zip(cols, headings):
             self.results_tree.heading(c, text=h)
         self.results_tree.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
@@ -94,6 +87,11 @@ class RelatorioObrasView(tk.Toplevel):
         self.results_tree.configure(yscrollcommand=scrollbar.set)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
+        self.results_tree.column("valor", stretch=True, width=100)
+        for c in cols[:-1]:
+            self.results_tree.column(c, stretch=True, width=120)
+        self.results_tree.column("id", stretch=False, width=50)
+        
         self.carregar_artistas()
         self.carregar_transacoes()
 
@@ -189,7 +187,6 @@ class RelatorioObrasView(tk.Toplevel):
         except ValueError as e:
             messagebox.showerror("Erro de validação", str(e))
 
-# execução independente para teste
 if __name__ == "__main__":
     root = tk.Tk(); root.withdraw()
     w = RelatorioObrasView(root)
