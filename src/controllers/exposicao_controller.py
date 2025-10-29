@@ -75,7 +75,7 @@ class ExposicaoController:
     # ---------- Participação (obra <-> exposição) ----------
     def adicionar_obra(self, id_exposicao: int, id_obra: int, observacao: str = None) -> Tuple[bool, str]:
         try:
-            # 1) Tentar chamar método do db com assinatura esperada
+            # 1) Tentar chamar método do db
             try:
                 res = self.db.inserir_participacao_exposicao(id_exposicao, id_obra, observacao)
             except TypeError:
@@ -83,7 +83,7 @@ class ExposicaoController:
             except Exception as e:
                 return False, f"Erro do DB ao adicionar participação: {e}"
 
-            # 2) Se não funcionou, tentar passar um objeto simples (compatibilidade)
+            # 2) Se não funcionou, tentar passar um objeto
             if res is None:
                 try:
                     p = type("Participacao", (), {})()
@@ -97,7 +97,7 @@ class ExposicaoController:
                 except Exception as e:
                     return False, f"Erro do DB ao adicionar participação: {e}"
 
-            # 3) Fallback: tentar inserir diretamente via SQL (nome da tabela usada no manager é participacao_exposicao)
+            # 3) Fallback: tentar inserir diretamente via SQL
             if res is None:
                 try:
                     sql = "INSERT OR IGNORE INTO participacao_exposicao (id_exposicao, id_obra, data_inclusao, observacao) VALUES (?, ?, ?, ?)"

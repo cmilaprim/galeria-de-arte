@@ -479,13 +479,11 @@ class ExposicaoView:
                     if oid and int(oid) in participacao_ids:
                         status_display = "Em Exposição"
                     else:
-                        # --- Lógica corrigida (sem importações externas) ---
                         if data_inicio and data_fim:
                             ocupado = self._obra_ocupada_em_periodo(int(oid), data_inicio, data_fim, exclude_expo_id=id_exposicao)
                             if ocupado:
                                 status_display = "Em Exposição"
                             else:
-                                # Se a obra já tiver um status diferente de Disponível, mantém o status real
                                 if status_db in ("Alugada", "Vendida", "Empréstimo"):
                                     status_display = status_db
                                 else:
@@ -495,7 +493,6 @@ class ExposicaoView:
                                 ocupado_hoje = self._obra_em_qualquer_exposicao_ativa_hoje(int(oid), exclude_expo_id=id_exposicao)
                                 status_display = "Em Exposição" if ocupado_hoje else "Disponível"
                             else:
-                                # Preserva o status real se não for disponível
                                 if status_db in ("Alugada", "Vendida", "Empréstimo"):
                                     status_display = status_db
                                 else:
