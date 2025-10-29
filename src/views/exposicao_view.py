@@ -479,15 +479,27 @@ class ExposicaoView:
                     if oid and int(oid) in participacao_ids:
                         status_display = "Em Exposição"
                     else:
+                        # --- Lógica corrigida (sem importações externas) ---
                         if data_inicio and data_fim:
                             ocupado = self._obra_ocupada_em_periodo(int(oid), data_inicio, data_fim, exclude_expo_id=id_exposicao)
-                            status_display = "Em Exposição" if ocupado else "Disponível"
+                            if ocupado:
+                                status_display = "Em Exposição"
+                            else:
+                                # Se a obra já tiver um status diferente de Disponível, mantém o status real
+                                if status_db in ("Alugada", "Vendida", "Empréstimo"):
+                                    status_display = status_db
+                                else:
+                                    status_display = "Disponível"
                         else:
-                            if status_db and status_db.lower().startswith("em expos"):
+                            if status_db == "Em Exposição":
                                 ocupado_hoje = self._obra_em_qualquer_exposicao_ativa_hoje(int(oid), exclude_expo_id=id_exposicao)
                                 status_display = "Em Exposição" if ocupado_hoje else "Disponível"
                             else:
-                                status_display = status_db or status_display
+                                # Preserva o status real se não for disponível
+                                if status_db in ("Alugada", "Vendida", "Empréstimo"):
+                                    status_display = status_db
+                                else:
+                                    status_display = status_db or "Disponível"
                 except Exception: status_display = status_db
 
                 tag = ""; display_titulo = titulo
@@ -503,42 +515,72 @@ class ExposicaoView:
 
         def toggle_adicionar():
             sel_items = tree.selection()
-            if not sel_items: messagebox.showwarning("Aviso", "Selecione uma obra para marcar para adicionar."); return
+            if not sel_items:
+                messagebox.showwarning("Aviso", "Selecione uma obra para marcar para adicionar.")
+                return
             nonlocal to_add, to_remove
             changed = False
             for item in sel_items:
                 try:
-                    values = tree.item(item, "values"); id_obra = int(values[0])
+                    values = tree.item(item, "values")
+                    id_obra = int(values[0])
+
+                    if id_obra in to_remove:
+                        to_remove.remove(id_obra)
+                        changed = True
+                        continue
+
                     if id_obra in initial_participacao_ids:
-                        messagebox.showinfo("Info", f"Obra ID {id_obra} já está vinculada à exposição."); continue
+                        messagebox.showinfo("Info", f"Obra ID {id_obra} já está vinculada à exposição.")
+                        continue
+
                     disponivel = self._obra_efetivamente_disponivel(id_obra, data_inicio, data_fim, exclude_expo_id=id_exposicao)
                     if not disponivel:
-                        messagebox.showwarning("Atenção", f"Obra ID {id_obra} não pode ser marcada para adicionar (não disponível)."); continue
-                    if id_obra in to_add: to_add.remove(id_obra)
+                        messagebox.showwarning("Atenção", f"Obra ID {id_obra} não pode ser marcada para adicionar (não disponível).")
+                        continue
+
+                    if id_obra in to_add:
+                        to_add.remove(id_obra)
                     else:
-                        if id_obra in to_remove: to_remove.remove(id_obra)
                         to_add.add(id_obra)
+
                     changed = True
-                except Exception: continue
-            if changed: carregar()
+                except Exception:
+                    continue
+
+            if changed:
+                carregar()
 
         def toggle_remover():
             sel_items = tree.selection()
-            if not sel_items: messagebox.showwarning("Aviso", "Selecione uma obra para marcar para remoção."); return
+            if not sel_items:
+                messagebox.showwarning("Aviso", "Selecione uma obra para marcar para remoção."); return
             nonlocal to_add, to_remove
             changed = False
             for item in sel_items:
                 try:
                     values = tree.item(item, "values"); id_obra = int(values[0])
+
+                    if id_obra in to_add:
+                        to_add.remove(id_obra)
+                        changed = True
+                        continue
+
                     if id_obra not in initial_participacao_ids:
-                        messagebox.showinfo("Info", f"Obra ID {id_obra} não está vinculada atualmente; marque-a para adicionar em vez disso."); continue
-                    if id_obra in to_remove: to_remove.remove(id_obra)
+                        messagebox.showinfo("Info", f"Obra ID {id_obra} não está vinculada atualmente; marque-a para adicionar em vez disso.")
+                        continue
+
+                    if id_obra in to_remove:
+                        to_remove.remove(id_obra)
                     else:
-                        if id_obra in to_add: to_add.remove(id_obra)
+                        if id_obra in to_add:
+                            to_add.remove(id_obra)
                         to_remove.add(id_obra)
                     changed = True
-                except Exception: continue
-            if changed: carregar()
+                except Exception:
+                    continue
+            if changed:
+                carregar()
 
         def confirmar():
             any_change = False
