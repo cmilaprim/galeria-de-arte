@@ -5,27 +5,33 @@ from src.models.exposicao_model import Exposicao, StatusExposicao
 
 class ExposicaoController:
     def __init__(self):
+        # instancia o manager de banco de dados (encapsula acesso ao DB)
         self.db = DatabaseManager()
 
     def _valida_data(self, s: str, campo: str):
+        # valida formato de data esperado (DD/MM/YYYY). Se vazio, considera aceitável.
         if not s:
             return
         try:
             datetime.strptime(s, "%d/%m/%Y")
         except Exception:
+            # lança ValueError para ser tratado pelo chamador
             raise ValueError(f"{campo} deve estar no formato DD/MM/YYYY")
 
     def salvar(self, id_exposicao, nome, tema, localizacao, status_texto, data_inicio, data_fim, data_cadastro, descricao) -> Tuple[bool, str]:
+        # função principal para criar ou atualizar uma exposição.
         try:
             if not nome:
                 return False, "Nome é obrigatório."
 
+            # valida campos de data (lança ValueError em formato inválido)
             self._valida_data(data_inicio, "Data Início")
             self._valida_data(data_fim, "Data Fim")
             self._valida_data(data_cadastro, "Data Cadastro")
 
             status_enum = next((s for s in StatusExposicao if s.value == status_texto), StatusExposicao.PLANEJADA)
 
+            # cria o objeto de domínio Exposicao
             exposicao = Exposicao(
                 id_exposicao,
                 nome,
@@ -38,6 +44,7 @@ class ExposicaoController:
                 descricao
             )
 
+            # se id informado => atualizar, caso contrário => inserir novo
             if id_exposicao:
                 try:
                     return self.db.atualizar_exposicao(exposicao)
@@ -58,12 +65,14 @@ class ExposicaoController:
             return False, f"Erro ao salvar exposição: {e}"
 
     def listar(self) -> List[Any]:
+        # retorna lista de exposições
         try:
             return self.db.listar_exposicoes()
         except Exception:
             return []
 
     def carregar(self, id_exposicao: int) -> Optional[Any]:
+        # carrega uma exposição específica por id
         try:
             return self.db.obter_exposicao(id_exposicao)
         except Exception:
@@ -81,6 +90,7 @@ class ExposicaoController:
             except TypeError:
                 res = None
             except Exception as e:
+                # erro de DB tratado e retornado como falha
                 return False, f"Erro do DB ao adicionar participação: {e}"
 
             # 2) Se não funcionou, tentar passar um objeto
@@ -123,7 +133,7 @@ class ExposicaoController:
                 return True, "Participação adicionada."
 
             if res is None:
-                return True, "Participação adicionada (sem retorno detalhado)."
+                return True, "Participação adicionada."
 
             try:
                 if hasattr(res, "id") or hasattr(res, "id_exposicao") or hasattr(res, "id_obra"):
@@ -137,6 +147,7 @@ class ExposicaoController:
             return False, f"Erro ao adicionar participação: {e}"
 
     def remover_obra(self, id_exposicao: int, id_obra: int) -> Tuple[bool, str]:
+        # remove vínculo exposição<->obra com fallbacks similares ao adicionar
         try:
             try:
                 res = self.db.remover_participacao_exposicao(id_exposicao, id_obra)
@@ -160,12 +171,14 @@ class ExposicaoController:
             return False, f"Erro ao remover participação: {e}"
 
     def listar_obras(self, id_exposicao: int) -> List[Any]:
+        # lista obras vinculadas a uma exposição
         try:
             return self.db.listar_participacoes_por_exposicao(id_exposicao)
         except Exception:
             return []
 
     def verificar_participacao(self, id_exposicao: int, id_obra: int) -> bool:
+        # verifica se já existe participação entre exposição e obra
         try:
             return bool(self.db.verificar_participacao(id_exposicao, id_obra))
         except Exception:
