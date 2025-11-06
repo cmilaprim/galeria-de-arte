@@ -82,7 +82,7 @@ class ExposicaoView:
 
         # botão gerenciar obra
         btns_bottom = ttk.Frame(self.root); btns_bottom.pack(fill="x", padx=10, pady=(0,10))
-        ttk.Button(btns_bottom, text="Gerenciar obras", command=self._abrir_popup_adicionar_obra, width=20).pack(side="right")
+        ttk.Button(btns_bottom, text="Adicionar obras", command=self._abrir_popup_adicionar_obra, width=20).pack(side="right")
 
         self._id_atual = None; self._prev_status = None; self._prev_start = None; self._prev_end = None
         self._carregar_lista(); self.tree.bind("<Double-1>", self._on_duplo)
@@ -107,36 +107,8 @@ class ExposicaoView:
         if not inicio and fim: return "Em Curso" if hoje <= fim else "Finalizada"
         return ""
 
-    def _execute_update(self, sql, params=()):
-        # executor genérico de updates/inserts com fallbacks (manager, módulo database.manager)
-        try:
-            if self.manager:
-                dbobj = getattr(self.manager, "db", None)
-                if dbobj and hasattr(dbobj, "cursor"):
-                    with dbobj.cursor() as c: c.execute(sql, params)
-                    try: dbobj.commit()
-                    except Exception: pass
-                    return True
-                if hasattr(self.manager, "conectar"):
-                    conn = self.manager.conectar(); cur = conn.cursor(); cur.execute(sql, params); conn.commit(); conn.close(); return True
-                if hasattr(self.manager, "cursor"):
-                    with self.manager.cursor() as c: c.execute(sql, params);
-                    try: self.manager.commit()
-                    except Exception: pass
-                    return True
-            import database.manager as dbmod
-            dbobj = getattr(dbmod, "db", None)
-            if dbobj and hasattr(dbobj, "cursor"):
-                with dbobj.cursor() as c: c.execute(sql, params)
-                try: dbobj.commit()
-                except Exception: pass
-                return True
-        except Exception:
-            return False
-        return False
-
     def _set_obra_status(self, id_obra: int, novo_status: str) -> bool:
-        # tenta atualizar status da obra utilizando controller/variações de API; cai para SQL direto se necessário
+        # atualiza status da obra utilizando controller
         if id_obra is None: return False
         try:
             if hasattr(self.obra_controller, "atualizar_status"):
@@ -156,13 +128,10 @@ class ExposicaoView:
                     res = fn(self._id_atual, id_obra, novo_status); return bool(res[0]) if isinstance(res, tuple) else bool(res)
         except Exception:
             pass
-        # fallback: update SQL direto com diferentes placeholders
-        ok = self._execute_update("UPDATE obras SET status=? WHERE id_obra=?", (novo_status, id_obra))
-        if ok: return True
-        return self._execute_update("UPDATE obras SET status=%s WHERE id_obra=%s", (novo_status, id_obra))
+        return False
 
     def _get_status_da_obra(self, id_obra: int) -> str:
-        # tenta obter status da obra consultando controllers, listagens em memória ou DB diretamente
+        # tenta obter status da obra consultando controllers/listas
         try:
             if hasattr(self.obra_controller, "carregar"):
                 o = self.obra_controller.carregar(id_obra)
@@ -180,17 +149,6 @@ class ExposicaoView:
                             status_raw = getattr(ob,"status",None) or (ob.get("status") if isinstance(ob, dict) else None)
                             return self._normalizar_status(status_raw)
                     except Exception: continue
-        except Exception: pass
-        try:
-            for q, params in [("SELECT status FROM obras WHERE id_obra=?", (id_obra,)), ("SELECT status FROM obras WHERE id_obra=%s", (id_obra,))]:
-                if self.manager:
-                    dbobj = getattr(self.manager, "db", None)
-                    if dbobj and hasattr(dbobj, "cursor"):
-                        with dbobj.cursor() as c: c.execute(q, params); row = c.fetchone()
-                        if row: return self._normalizar_status(row[0])
-                    else:
-                        conn = self.manager.conectar(); cur = conn.cursor(); cur.execute(q, params); row = cur.fetchone(); conn.close();
-                        if row: return self._normalizar_status(row[0])
         except Exception: pass
         return ""
 
@@ -226,7 +184,6 @@ class ExposicaoView:
                             # se qualquer data estiver incompleta, considera ocupado por garantia
                             return True
                     except Exception: continue
-            # fallback: lista todas exposições e checa participações
             expos_all = self.controller.listar() or []
             for ex in expos_all:
                 try:
@@ -234,10 +191,7 @@ class ExposicaoView:
                     if exclude_expo_id and int(ex_id)==int(exclude_expo_id): continue
                     s = self._parse_data(getattr(ex,"data_inicio",None) or (ex.get("data_inicio") if isinstance(ex,dict) else None))
                     e = self._parse_data(getattr(ex,"data_fim",None) or (ex.get("data_fim") if isinstance(ex,dict) else None))
-                    try:
-                        obras = self.controller.listar_obras(ex_id) or []
-                    except Exception:
-                        obras = []
+                    obras = self.controller.listar_obras(ex_id) or []
                     ids = { (getattr(p,"id_obra",None) or (p.get("id_obra") if isinstance(p,dict) else p["id_obra"])) for p in obras }
                     if int(id_obra) not in {int(x) for x in ids}: continue
                     if s and e and inicio and fim:
@@ -247,7 +201,7 @@ class ExposicaoView:
                         return True
                 except Exception: continue
         except Exception:
-            # se não conseguimos calcular por controller, tenta inferir pelo status da obra (disponível / não disponível)
+            # se não conseguimos calcular por controller, tenta verificar pelo status da obra
             try:
                 o = self.obra_controller.carregar(id_obra) if hasattr(self.obra_controller,"carregar") else None
                 status_raw = getattr(o,"status",None) or (o.get("status") if isinstance(o, dict) else "")
@@ -328,8 +282,7 @@ class ExposicaoView:
             try:
                 # para exposiçōes finalizadas, verifica obras e atualiza status
                 if status_to_show == "Finalizada":
-                    try: obras = self.controller.listar_obras(id_ex) or []
-                    except Exception: obras = []
+                    obras = self.controller.listar_obras(id_ex) or []
                     for p in obras:
                         try:
                             pid = getattr(p,"id_obra",None) or (p.get("id_obra") if isinstance(p, dict) else p["id_obra"])
@@ -352,8 +305,7 @@ class ExposicaoView:
                 # se mudou para "Em Curso", marca obras como "Em Exposição"
                 new_status = status_to_save
                 if new_status == "Em Curso":
-                    try: obras = self.controller.listar_obras(self._id_atual) or []
-                    except Exception: obras = []
+                    obras = self.controller.listar_obras(self._id_atual) or []
                     for p in obras:
                         try:
                             pid = getattr(p,"id_obra",None) or (p.get("id_obra") if isinstance(p,dict) else p["id_obra"])
@@ -362,8 +314,7 @@ class ExposicaoView:
                         except Exception: continue
                 # se está Finalizada ou Planejada, libera obras que não estejam em outras exposições ativas
                 if new_status in ("Finalizada","Planejada"):
-                    try: obras = self.controller.listar_obras(self._id_atual) or []
-                    except Exception: obras = []
+                    obras = self.controller.listar_obras(self._id_atual) or []
                     for p in obras:
                         try:
                             pid = getattr(p,"id_obra",None) or (p.get("id_obra") if isinstance(p,dict) else p["id_obra"])
@@ -491,11 +442,8 @@ class ExposicaoView:
             except Exception: participacao_ids = set()
             initial_participacao_ids = participacao_ids.copy()
 
-            # tenta listar obras via obra_controller
-            try: obras = self.obra_controller.listar_obras() or []
-            except Exception:
-                try: obras = self.obra_controller.listar() or []
-                except Exception: obras = []
+            # lista obras via obra_controller
+            obras = self.obra_controller.listar_obras() or []
 
             for o in obras:
                 try: oid = getattr(o,"id_obra",None) or (o.get("id_obra") if isinstance(o,dict) else o["id_obra"])
@@ -615,8 +563,6 @@ class ExposicaoView:
                     if id_obra in to_remove:
                         to_remove.remove(id_obra)
                     else:
-                        if id_obra in to_add:
-                            to_add.remove(id_obra)
                         to_remove.add(id_obra)
                     changed = True
                 except Exception:
@@ -636,11 +582,6 @@ class ExposicaoView:
                         if isinstance(res, tuple): ok, msg = res
                         else: ok = bool(res)
                     except Exception as e: ok = False; msg = str(e)
-                    if not ok:
-                        try:
-                            deleted = self._execute_update("DELETE FROM participacao_exposicao WHERE id_exposicao = ? AND id_obra = ?", (id_exposicao, id_obra))
-                            if deleted: ok = True
-                        except Exception: pass
                     if ok:
                         # se obra não estiver em outra exposição ativa hoje, marca como disponível
                         if not self._obra_em_qualquer_exposicao_ativa_hoje(id_obra, exclude_expo_id=id_exposicao):
@@ -670,19 +611,14 @@ class ExposicaoView:
                     except Exception as e: ok=False; msg=str(e)
                     if not ok:
                         try:
-                            now_str = date.today().strftime("%d/%m/%Y")
-                            inserted = self._execute_update("INSERT OR IGNORE INTO participacao_exposicao (id_exposicao,id_obra,data_inclusao,observacao) VALUES (?, ?, ?, ?)", (id_exposicao, id_obra, now_str, None))
-                            if inserted: ok = True
-                        except Exception: pass
-                        if not ok:
-                            try:
-                                if hasattr(self.controller, "db") and hasattr(self.controller.db, "inserir_participacao_exposicao"):
-                                    p = type("P", (), {})()
-                                    p.id_exposicao = id_exposicao; p.id_obra = id_obra; p.data_inclusao = date.today().strftime("%d/%m/%Y"); p.observacao = None
-                                    res2 = self.controller.db.inserir_participacao_exposicao(p)
-                                    if isinstance(res2, tuple): ok = bool(res2[0])
-                                    else: ok = bool(res2)
-                            except Exception: pass
+                            if hasattr(self.controller, "db") and hasattr(self.controller.db, "inserir_participacao_exposicao"):
+                                p = type("P", (), {})()
+                                p.id_exposicao = id_exposicao; p.id_obra = id_obra; p.data_inclusao = date.today().strftime("%d/%m/%Y"); p.observacao = None
+                                res2 = self.controller.db.inserir_participacao_exposicao(p)
+                                if isinstance(res2, tuple): ok = bool(res2[0])
+                                else: ok = bool(res2)
+                        except Exception:
+                            pass
                     if ok:
                         self._set_obra_status(id_obra, "Em Exposição"); any_change = True
                     else:
