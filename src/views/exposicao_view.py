@@ -381,128 +381,105 @@ class ExposicaoView:
 
     # ---------------- popup selecionador de obras (modal) ----------------
     def _abrir_popup_adicionar_obra(self):
-        # abre modal para gerenciar obras vinculadas à exposição selecionada
         sel = self.tree.selection()
         if not sel:
-            messagebox.showwarning("Aviso", "Selecione uma exposição para adicionar obras."); return
+            messagebox.showwarning("Aviso", "Selecione uma exposição para adicionar obras.")
+            return
         row = self.tree.item(sel)["values"]
         try:
             id_exposicao = int(row[0])
         except Exception:
-            messagebox.showerror("Erro", "ID de exposição inválido."); return
+            messagebox.showerror("Erro", "ID de exposição inválido.")
+            return
 
-        # obtém período da exposição
         data_inicio_str = row[5] if len(row) > 5 else self.entry_data_inicio.get().strip()
         data_fim_str = row[6] if len(row) > 6 else self.entry_data_fim.get().strip()
         data_inicio = self._parse_data(data_inicio_str)
         data_fim = self._parse_data(data_fim_str)
 
-        # impede adicionar obras a exposições finalizadas
-        status_atual = self._compute_status_from_dates(data_inicio_str, data_fim_str)
-        if status_atual == "Finalizada":
-            messagebox.showerror("Erro", "Não é possível adicionar obras a uma exposição finalizada."); return
+        if self._compute_status_from_dates(data_inicio_str, data_fim_str) == "Finalizada":
+            messagebox.showerror("Erro", "Não é possível adicionar obras a uma exposição finalizada.")
+            return
 
-        # estado local para controlar alterações pendentes (ids)
-        initial_participacao_ids = set(); to_add = set(); to_remove = set()
+        initial_participacao_ids = set()
+        to_add = set()
+        to_remove = set()
 
-        # constrói janela modal com listagem de obras
-        win = tk.Toplevel(self.root); win.title("Gerenciar Obras"); win.transient(self.root); win.grab_set()
+        # janela/modal
+        win = tk.Toplevel(self.root)
+        win.title("Gerenciar Obras")
+        win.transient(self.root)
+        win.grab_set()
         win.geometry("900x520")
-        frame = ttk.Frame(win, padding=10); frame.pack(fill="both", expand=True)
-        cols = ("id","titulo","artista","status")
-        tree = ttk.Treeview(frame, columns=cols, show="headings", selectmode="extended")
-        for c,w in [("id",60),("titulo",460),("artista",200),("status",120)]:
-            tree.heading(c,text=c.title()); tree.column(c,anchor="w", width=w)
-        tree.pack(fill="both", expand=True, padx=6, pady=(6,4))
-        # tags visuais para destacar estado das linhas
-        try:
-            tree.tag_configure("in_exposicao", background="#E8F6E8"); tree.tag_configure("busy", background="#F8E8E8")
-            tree.tag_configure("to_add", background="#D6F5D6"); tree.tag_configure("to_remove", background="#F5D6D6")
-        except Exception: pass
 
-        # botões para confirmar/cancelar e alternar marcações de adicionar/remover
-        btns_frame = ttk.Frame(frame); btns_frame.pack(fill="x", pady=(6,6))
-        left_frame = ttk.Frame(btns_frame); left_frame.pack(side="left", fill="x", expand=True)
-        right_frame = ttk.Frame(btns_frame); right_frame.pack(side="right")
-        ttk.Button(left_frame, text="Confirmar Seleção", command=lambda: confirmar()).pack(side="left", padx=8)
-        ttk.Button(left_frame, text="Cancelar", command=win.destroy).pack(side="left", padx=8)
-        ttk.Button(right_frame, text="Remover", command=lambda: toggle_remover(), width=14).pack(side="right", padx=6)
-        ttk.Button(right_frame, text="Adicionar", command=lambda: toggle_adicionar(), width=14).pack(side="right", padx=6)
+        frame = ttk.Frame(win, padding=10)
+        frame.pack(fill="both", expand=True)
+
+        cols = ("id", "titulo", "artista", "status")
+        tree = ttk.Treeview(frame, columns=cols, show="headings", selectmode="extended")
+        for c, w in [("id", 60), ("titulo", 460), ("artista", 200), ("status", 120)]:
+            tree.heading(c, text=c.title())
+            tree.column(c, anchor="w", width=w)
+        tree.pack(fill="both", expand=True, padx=6, pady=(6, 4))
+
+        # tags visuais
+        tree.tag_configure("in_exposicao", background="#E8F6E8")
+        tree.tag_configure("busy", background="#F8E8E8")
+        tree.tag_configure("to_add", background="#D6F5D6")
+        tree.tag_configure("to_remove", background="#F5D6D6")
 
         def carregar():
-            # carrega obras e marca visualmente as que já participam da exposição
             nonlocal initial_participacao_ids
-            for i in tree.get_children(): tree.delete(i)
-            participacao_ids = set()
-            try:
-                participacoes = self.controller.listar_obras(id_exposicao) or []
-                for p in participacoes:
-                    try: pid = getattr(p,"id_obra",None) or (p.get("id_obra") if isinstance(p,dict) else p["id_obra"]); participacao_ids.add(int(pid))
-                    except Exception: continue
-            except Exception: participacao_ids = set()
-            initial_participacao_ids = participacao_ids.copy()
+            for i in tree.get_children():
+                tree.delete(i)
 
-            # lista obras via obra_controller
+            participacoes = self.controller.listar_obras(id_exposicao) or []
+            initial_participacao_ids = {int(p["id_obra"]) for p in participacoes}
+
             obras = self.obra_controller.listar_obras() or []
-
             for o in obras:
-                try: oid = getattr(o,"id_obra",None) or (o.get("id_obra") if isinstance(o,dict) else o["id_obra"])
-                except Exception: oid = ""
-                try: titulo = getattr(o,"titulo",None) or (o.get("titulo") if isinstance(o,dict) else str(o))
-                except Exception: titulo = str(o)
-                artista = ""
-                try:
-                    # extrai nome do artista
-                    if hasattr(o,"artista") and o.artista is not None:
-                        a = o.artista
-                        artista = a if isinstance(a,str) else (getattr(a,"nome",None) or getattr(a,"name",None) or str(a))
+                oid = int(o.id_obra)
+                titulo = o.titulo
+                artista = str(o.artista) if o.artista is not None else ""
+                status_db = self._normalizar_status(o.status)
+
+                # determinar status_display
+                if oid in to_add or oid in initial_participacao_ids:
+                    status_display = "Em Exposição"
+                else:
+                    if data_inicio and data_fim:
+                        ocupado = self._obra_ocupada_em_periodo(oid, data_inicio, data_fim, exclude_expo_id=id_exposicao)
+                        status_display = "Em Exposição" if ocupado else ("Disponível" if status_db not in ("Alugada", "Vendida", "Empréstimo") else status_db)
                     else:
-                        if isinstance(o,dict): artista = o.get("nome_artista") or o.get("artista") or ""
-                        else: artista = getattr(o,"nome_artista","") or getattr(o,"artista","") or ""
-                    artista = str(artista) if artista is not None else ""
-                except Exception: artista = ""
-                try: status_db = self._normalizar_status(getattr(o,"status",None) or (o.get("status") if isinstance(o,dict) else ""))
-                except Exception: status_db = ""
-                status_display = status_db
-                try:
-                    # determina status a mostrar considerando participações e período da exposição
-                    if oid and int(oid) in participacao_ids:
-                        status_display = "Em Exposição"
-                    else:
-                        if data_inicio and data_fim:
-                            ocupado = self._obra_ocupada_em_periodo(int(oid), data_inicio, data_fim, exclude_expo_id=id_exposicao)
-                            if ocupado:
-                                status_display = "Em Exposição"
-                            else:
-                                if status_db in ("Alugada", "Vendida", "Empréstimo"):
-                                    status_display = status_db
-                                else:
-                                    status_display = "Disponível"
+                        if status_db == "Em Exposição":
+                            ocupado_hoje = self._obra_em_qualquer_exposicao_ativa_hoje(oid, exclude_expo_id=id_exposicao)
+                            status_display = "Em Exposição" if ocupado_hoje else "Disponível"
                         else:
-                            if status_db == "Em Exposição":
-                                ocupado_hoje = self._obra_em_qualquer_exposicao_ativa_hoje(int(oid), exclude_expo_id=id_exposicao)
-                                status_display = "Em Exposição" if ocupado_hoje else "Disponível"
-                            else:
-                                if status_db in ("Alugada", "Vendida", "Empréstimo"):
-                                    status_display = status_db
-                                else:
-                                    status_display = status_db or "Disponível"
-                except Exception: status_display = status_db
+                            status_display = status_db or "Disponível"
 
-                tag = ""; display_titulo = titulo
-                try:
-                    # marca visualmente obras já na exposição ou que serão adicionadas/removidas
-                    if oid and int(oid) in initial_participacao_ids: display_titulo = f"{titulo} (✓)"; tag = "in_exposicao"
-                    if oid and int(oid) in to_add: display_titulo = f"{titulo} (✓)"; tag = "to_add"
-                    if oid and int(oid) in to_remove: tag = "to_remove"
-                    if (not tag) and status_display and status_display.lower() != "disponível": tag = "busy"
-                except Exception: pass
+                # determinar tag
+                if oid in to_add:
+                    tag = "to_add"
+                elif oid in to_remove:
+                    tag = "to_remove"
+                elif oid in initial_participacao_ids:
+                    tag = "in_exposicao"
+                else:
+                    tag = "busy" if status_display.lower() != "disponível" else ""
 
-                try: tree.insert("", "end", values=(oid, display_titulo, artista, status_display), tags=(tag,))
-                except Exception: tree.insert("", "end", values=(oid, display_titulo, artista, status_display))
+                # texto do título
+                if oid in to_add:
+                    display_titulo = f"{titulo} (+)"
+                elif oid in to_remove:
+                    display_titulo = f"{titulo} (–)"
+                elif oid in initial_participacao_ids:
+                    display_titulo = f"{titulo} (✓)"
+                else:
+                    display_titulo = titulo
+
+                tree.insert("", "end", values=(oid, display_titulo, artista, status_display), tags=(tag,))
 
         def toggle_adicionar():
-            # marca/desmarca obras selecionadas para adição
             sel_items = tree.selection()
             if not sel_items:
                 messagebox.showwarning("Aviso", "Selecione uma obra para marcar para adicionar.")
@@ -510,128 +487,118 @@ class ExposicaoView:
             nonlocal to_add, to_remove
             changed = False
             for item in sel_items:
-                try:
-                    values = tree.item(item, "values")
-                    id_obra = int(values[0])
-
-                    if id_obra in to_remove:
-                        to_remove.remove(id_obra)
-                        changed = True
-                        continue
-
-                    if id_obra in initial_participacao_ids:
-                        messagebox.showinfo("Info", f"Obra ID {id_obra} já está vinculada à exposição.")
-                        continue
-
-                    disponivel = self._obra_efetivamente_disponivel(id_obra, data_inicio, data_fim, exclude_expo_id=id_exposicao)
-                    if not disponivel:
-                        messagebox.showwarning("Atenção", f"Obra ID {id_obra} não pode ser marcada para adicionar (não disponível).")
-                        continue
-
-                    if id_obra in to_add:
-                        to_add.remove(id_obra)
-                    else:
-                        to_add.add(id_obra)
-
+                values = tree.item(item, "values")
+                id_obra = int(values[0])
+                if id_obra in to_remove:
+                    to_remove.remove(id_obra)
                     changed = True
-                except Exception:
                     continue
-
+                if id_obra in initial_participacao_ids:
+                    messagebox.showinfo("Info", f"Obra ID {id_obra} já está vinculada à exposição.")
+                    continue
+                if not self._obra_efetivamente_disponivel(id_obra, data_inicio, data_fim, exclude_expo_id=id_exposicao):
+                    messagebox.showwarning("Atenção", f"Obra ID {id_obra} não pode ser marcada para adicionar (não disponível).")
+                    continue
+                if id_obra in to_add:
+                    to_add.remove(id_obra)
+                else:
+                    to_add.add(id_obra)
+                changed = True
             if changed:
                 carregar()
 
         def toggle_remover():
-            # marca/desmarca obras selecionadas para remoção
             sel_items = tree.selection()
             if not sel_items:
-                messagebox.showwarning("Aviso", "Selecione uma obra para marcar para remoção."); return
+                messagebox.showwarning("Aviso", "Selecione uma obra para marcar para remoção.")
+                return
             nonlocal to_add, to_remove
             changed = False
             for item in sel_items:
-                try:
-                    values = tree.item(item, "values"); id_obra = int(values[0])
-
-                    if id_obra in to_add:
-                        to_add.remove(id_obra)
-                        changed = True
-                        continue
-
-                    if id_obra not in initial_participacao_ids:
-                        messagebox.showinfo("Info", f"Obra ID {id_obra} não está vinculada atualmente; marque-a para adicionar em vez disso.")
-                        continue
-
-                    if id_obra in to_remove:
-                        to_remove.remove(id_obra)
-                    else:
-                        to_remove.add(id_obra)
+                values = tree.item(item, "values")
+                id_obra = int(values[0])
+                if id_obra in to_add:
+                    to_add.remove(id_obra)
                     changed = True
-                except Exception:
                     continue
+                if id_obra not in initial_participacao_ids:
+                    messagebox.showinfo("Info", f"Obra ID {id_obra} não está vinculada atualmente; marque-a para adicionar em vez disso.")
+                    continue
+                if id_obra in to_remove:
+                    to_remove.remove(id_obra)
+                else:
+                    to_remove.add(id_obra)
+                changed = True
             if changed:
                 carregar()
 
         def confirmar():
-            # aplica alterações
+            nonlocal id_exposicao
+            id_exposicao = int(id_exposicao)
             any_change = False
-            # remover primeiro
+
+            # ---- REMOVER ----
             for id_obra in list(to_remove):
-                try:
-                    ok = False; msg = None
-                    try:
-                        res = self.controller.remover_obra(id_exposicao, id_obra)
-                        if isinstance(res, tuple): ok, msg = res
-                        else: ok = bool(res)
-                    except Exception as e: ok = False; msg = str(e)
-                    if ok:
-                        # se obra não estiver em outra exposição ativa hoje, marca como disponível
-                        if not self._obra_em_qualquer_exposicao_ativa_hoje(id_obra, exclude_expo_id=id_exposicao):
-                            self._set_obra_status(id_obra, "Disponível")
-                        any_change = True
-                    else:
-                        messagebox.showerror("Erro", msg or f"Não foi possível remover obra ID {id_obra}.")
-                except Exception as e: messagebox.showerror("Erro", f"Erro ao remover obra ID {id_obra}: {e}")
+                id_obra = int(id_obra)
+                res = self.controller.remover_obra(id_exposicao, id_obra)
+                ok = bool(res[0]) if isinstance(res, tuple) else bool(res)
+                msg = res[1] if isinstance(res, tuple) and len(res) > 1 else None
+                if ok:
+                    if not self._obra_em_qualquer_exposicao_ativa_hoje(id_obra, exclude_expo_id=id_exposicao):
+                        self._set_obra_status(id_obra, "Disponível")
+                    any_change = True
+                else:
+                    messagebox.showerror("Erro", msg or f"Não foi possível remover obra ID {id_obra}.")
 
-            # adicionar
+            # ---- ADICIONAR ----
             for id_obra in list(to_add):
-                try:
-                    disponivel = self._obra_efetivamente_disponivel(id_obra, data_inicio, data_fim, exclude_expo_id=id_exposicao)
-                    if not disponivel:
-                        messagebox.showwarning("Atenção", f"Obra ID {id_obra} não está disponível. Não será adicionada."); continue
+                id_obra = int(id_obra)
+                if not self._obra_efetivamente_disponivel(id_obra, data_inicio, data_fim, exclude_expo_id=id_exposicao):
+                    messagebox.showwarning("Atenção", f"Obra ID {id_obra} não está disponível. Não será adicionada.")
+                    continue
 
-                    ocupado = False
-                    if data_inicio and data_fim: ocupado = self._obra_ocupada_em_periodo(id_obra, data_inicio, data_fim, exclude_expo_id=id_exposicao)
-                    else: ocupado = self._obra_ocupada_em_periodo(id_obra, None, None, exclude_expo_id=id_exposicao)
-                    if ocupado:
-                        messagebox.showwarning("Atenção", f"Obra ID {id_obra} está ocupada em período conflituoso e não será adicionada."); continue
-                    ok = False; msg = None
+                ocupado = self._obra_ocupada_em_periodo(id_obra, data_inicio, data_fim, exclude_expo_id=id_exposicao)
+                if ocupado:
+                    messagebox.showwarning("Atenção", f"Obra ID {id_obra} está ocupada em período conflituoso.")
+                    continue
+
+                res = self.controller.adicionar_obra(id_exposicao, id_obra)
+                ok = bool(res[0]) if isinstance(res, tuple) else bool(res)
+                msg = res[1] if isinstance(res, tuple) and len(res) > 1 else None
+
+                if ok:
+                    # atualiza status na aplicação
+                    self._set_obra_status(id_obra, "Em Exposição")
                     try:
-                        res = self.controller.adicionar_obra(id_exposicao, id_obra)
-                        if isinstance(res, tuple): ok, msg = res
-                        else: ok = bool(res)
-                    except Exception as e: ok=False; msg=str(e)
-                    if not ok:
-                        try:
-                            if hasattr(self.controller, "db") and hasattr(self.controller.db, "inserir_participacao_exposicao"):
-                                p = type("P", (), {})()
-                                p.id_exposicao = id_exposicao; p.id_obra = id_obra; p.data_inclusao = date.today().strftime("%d/%m/%Y"); p.observacao = None
-                                res2 = self.controller.db.inserir_participacao_exposicao(p)
-                                if isinstance(res2, tuple): ok = bool(res2[0])
-                                else: ok = bool(res2)
-                        except Exception:
-                            pass
-                    if ok:
-                        self._set_obra_status(id_obra, "Em Exposição"); any_change = True
-                    else:
-                        messagebox.showerror("Erro", msg or f"Não foi possível adicionar obra ID {id_obra}.")
-                except Exception as e: messagebox.showerror("Erro", f"Erro ao adicionar obra ID {id_obra}: {e}")
+                        if hasattr(self.obra_controller, "db_manager"):
+                            with self.obra_controller.db_manager.cursor() as cur:
+                                cur.execute("UPDATE obras SET status = ? WHERE id_obra = ?", ("Em Exposição", int(id_obra)))
+                    except Exception:
+                        pass
+                    any_change = True
+                else:
+                    messagebox.showerror("Erro", msg or f"Não foi possível adicionar obra ID {id_obra}.")
 
-            if any_change: messagebox.showinfo("Sucesso", "Alterações aplicadas.")
-            win.destroy(); self._carregar_lista()
+            if any_change:
+                messagebox.showinfo("Sucesso", "Alterações aplicadas.")
+            win.destroy()
+            self._carregar_lista()
 
-        # inicializa listagem e aguarda fechamento do modal
+        # botões
+        btns_frame = ttk.Frame(frame)
+        btns_frame.pack(fill="x", pady=(6, 6))
+        left_frame = ttk.Frame(btns_frame)
+        left_frame.pack(side="left", fill="x", expand=True)
+        right_frame = ttk.Frame(btns_frame)
+        right_frame.pack(side="right")
+
+        ttk.Button(left_frame, text="Confirmar Seleção", command=confirmar).pack(side="left", padx=8)
+        ttk.Button(left_frame, text="Cancelar", command=win.destroy).pack(side="left", padx=8)
+        ttk.Button(right_frame, text="Remover", command=toggle_remover, width=14).pack(side="right", padx=6)
+        ttk.Button(right_frame, text="Adicionar", command=toggle_adicionar, width=14).pack(side="right", padx=6)
+
         carregar()
-        try: win.deiconify()
-        except Exception: pass
+        win.deiconify()
         win.wait_window()
 
     def voltar_inicio(self):

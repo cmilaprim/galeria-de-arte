@@ -86,7 +86,7 @@ class ExposicaoController:
         try:
             # 1) Tentar chamar método do db
             try:
-                res = self.db.inserir_participacao_exposicao(id_exposicao, id_obra, observacao)
+                res = self.db.inserir_participacao_exposicao(id_exposicao=id_exposicao, id_obra=id_obra, observacao=observacao)
             except TypeError:
                 res = None
             except Exception as e:
