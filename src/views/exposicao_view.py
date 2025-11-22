@@ -32,7 +32,6 @@ class ExposicaoView:
         campos_linha0 = [("Nome:","entry_nome"),("Tema:","entry_tema"),("Localização:","entry_local"),("Status:","entry_status")]
         for idx, (lbl, attr) in enumerate(campos_linha0):
             ttk.Label(frm_top, text=lbl).grid(row=0, column=idx*2, sticky="w", padx=(10,5), pady=4)
-            # status é readonly e preenchida automaticamente
             ent = ttk.Entry(frm_top, state="readonly") if attr=="entry_status" else ttk.Entry(frm_top)
             ent.grid(row=0, column=idx*2+1, sticky="ew", padx=(5,10), pady=4); setattr(self, attr, ent)
 
@@ -40,7 +39,6 @@ class ExposicaoView:
         campos_linha1 = [("Data Início:","entry_data_inicio"),("Data Fim:","entry_data_fim"),("Data Cadastro:","entry_data_cadastro")]
         for idx, (lbl, attr) in enumerate(campos_linha1):
             ttk.Label(frm_top, text=lbl).grid(row=1, column=idx*2, sticky="w", padx=(10,5), pady=4)
-            # data_cadastro é readonly e preenchida automaticamente
             ent = ttk.Entry(frm_top, state="readonly") if attr=="entry_data_cadastro" else ttk.Entry(frm_top)
             ent.grid(row=1, column=idx*2+1, sticky="ew", padx=(5,10), pady=4); setattr(self, attr, ent)
 
@@ -82,14 +80,13 @@ class ExposicaoView:
 
         # botão gerenciar obra
         btns_bottom = ttk.Frame(self.root); btns_bottom.pack(fill="x", padx=10, pady=(0,10))
-        ttk.Button(btns_bottom, text="Adicionar obras", command=self._abrir_popup_adicionar_obra, width=20).pack(side="right")
+        ttk.Button(btns_bottom, text="Adicionar obras", command=self._validar_exposicao, width=20).pack(side="right")
 
         self._id_atual = None; self._prev_status = None; self._prev_start = None; self._prev_end = None
         self._carregar_lista(); self.tree.bind("<Double-1>", self._on_duplo)
 
     # ---------------- helpers ----------------
     def _parse_data(self, s: str) -> Optional[date]:
-        # tenta parsear string para date com formatos comuns; retorna None se inválido
         if not s: return None
         for fmt in ("%d/%m/%Y","%Y-%m-%d"):
             try: return datetime.strptime(s, fmt).date()
@@ -97,7 +94,6 @@ class ExposicaoView:
         return None
 
     def _compute_status_from_dates(self, inicio_s: str, fim_s: str) -> str:
-        # determina status automático ("Planejada","Em Curso","Finalizada") a partir das datas
         inicio = self._parse_data(inicio_s); fim = self._parse_data(fim_s); hoje = date.today()
         if inicio and fim:
             if hoje < inicio: return "Planejada"
@@ -107,118 +103,96 @@ class ExposicaoView:
         if not inicio and fim: return "Em Curso" if hoje <= fim else "Finalizada"
         return ""
 
-    def _set_obra_status(self, id_obra: int, novo_status: str) -> bool:
-        # atualiza status da obra utilizando controller
-        if id_obra is None: return False
-        try:
-            if hasattr(self.obra_controller, "atualizar_status"):
-                res = self.obra_controller.atualizar_status(id_obra, novo_status)
-                return bool(res[0]) if isinstance(res, tuple) else bool(res)
-            for name in ("set_status","update_status","atualizar","atualizar_obra","atualizarStatus"):
-                if hasattr(self.obra_controller, name):
-                    fn = getattr(self.obra_controller, name)
-                    res = fn(id_obra, novo_status); return bool(res[0]) if isinstance(res, tuple) else bool(res)
-        except Exception:
-            pass
-        # tenta métodos do controller da exposição que atualizem status por obra
-        try:
-            for name in ("atualizar_status_obra","set_status_obra","atualizarObraStatus"):
-                if hasattr(self.controller, name):
-                    fn = getattr(self.controller, name)
-                    res = fn(self._id_atual, id_obra, novo_status); return bool(res[0]) if isinstance(res, tuple) else bool(res)
-        except Exception:
-            pass
-        return False
-
-    def _get_status_da_obra(self, id_obra: int) -> str:
-        # tenta obter status da obra consultando controllers/listas
-        try:
-            if hasattr(self.obra_controller, "carregar"):
-                o = self.obra_controller.carregar(id_obra)
-                if o is not None:
-                    status_raw = getattr(o,"status",None) or (o.get("status") if isinstance(o, dict) else None)
-                    return self._normalizar_status(status_raw)
-        except Exception: pass
-        try:
-            all_obs = self.obra_controller.listar_obras() if hasattr(self.obra_controller,"listar_obras") else (self.obra_controller.listar() if hasattr(self.obra_controller,"listar") else None)
-            if all_obs:
-                for ob in all_obs:
-                    try:
-                        oid = getattr(ob,"id_obra",None) or (ob.get("id_obra") if isinstance(ob, dict) else ob[0])
-                        if int(oid) == int(id_obra):
-                            status_raw = getattr(ob,"status",None) or (ob.get("status") if isinstance(ob, dict) else None)
-                            return self._normalizar_status(status_raw)
-                    except Exception: continue
-        except Exception: pass
-        return ""
-
     def _normalizar_status(self, status_raw) -> str:
-        # normaliza diferentes tipos de retorno (enum, objeto, str, None) para string
         if status_raw is None: return ""
         try:
             if hasattr(status_raw, "value") and isinstance(status_raw.value, str):
-                s = status_raw.value.strip();
+                s = status_raw.value.strip()
                 if s: return s
         except Exception: pass
         try:
             s = str(status_raw).strip(); return s if s else ""
         except Exception: return str(status_raw)
 
-    def _obra_ocupada_em_periodo(self, id_obra:int, inicio:Optional[date], fim:Optional[date], exclude_expo_id:Optional[int]=None) -> bool:
-        # verifica se a obra está ocupada (participando de outra exposição) no período
+    def _set_obra_status(self, id_obra: int, novo_status: str) -> bool:
+        if id_obra is None: return False
         try:
-            # primeiro tenta método do controller que retorna exposições por obra
-            if hasattr(self.controller, "exposicoes_por_obra"):
-                expos = self.controller.exposicoes_por_obra(id_obra) or []
-                for ex in expos:
-                    try:
-                        ex_id = getattr(ex,"id_exposicao",None) or (ex.get("id_exposicao") if isinstance(ex,dict) else ex["id_exposicao"])
-                        if exclude_expo_id and int(ex_id)==int(exclude_expo_id): continue
-                        s_raw = getattr(ex,"data_inicio",None) or (ex.get("data_inicio") if isinstance(ex,dict) else None)
-                        e_raw = getattr(ex,"data_fim",None) or (ex.get("data_fim") if isinstance(ex,dict) else None)
-                        s = self._parse_data(str(s_raw)) if s_raw else None
-                        e = self._parse_data(str(e_raw)) if e_raw else None
-                        if s and e and inicio and fim:
-                            if not (e < inicio or s > fim): return True
-                        else:
-                            # se qualquer data estiver incompleta, considera ocupado por garantia
-                            return True
-                    except Exception: continue
+            o = None
+            if hasattr(self.obra_controller, "buscar_obra_por_id"):
+                o = self.obra_controller.buscar_obra_por_id(int(id_obra))
+            if not o:
+                return False
+            # monta parâmetros para atualizar_obra
+            try:
+                obra_id = getattr(o, "id_obra", None) or (o.get("id_obra") if isinstance(o, dict) else None)
+                titulo = getattr(o, "titulo", None) or (o.get("titulo") if isinstance(o, dict) else "")
+                ano = getattr(o, "ano", None) or (o.get("ano") if isinstance(o, dict) else None)
+                artista = getattr(o, "artista", None) or (o.get("nome_artista", None) if isinstance(o, dict) else None)
+                tipo = getattr(o, "tipo", None) or (o.get("tipo") if isinstance(o, dict) else "")
+                tecnica = getattr(o, "tecnica", None) or (o.get("tecnica") if isinstance(o, dict) else "")
+                dimensoes = getattr(o, "dimensoes", None) or (o.get("dimensoes") if isinstance(o, dict) else "")
+                localizacao = getattr(o, "localizacao", None) or (o.get("localizacao") if isinstance(o, dict) else "")
+                preco = getattr(o, "preco", None) or (o.get("preco") if isinstance(o, dict) else 0)
+                imagem = getattr(o, "imagem", None) if not isinstance(o, dict) else o.get("imagem", None)
+                # chamar atualizar_obra (controller espera muitos parâmetros)
+                if hasattr(self.obra_controller, "atualizar_obra"):
+                    res = self.obra_controller.atualizar_obra(int(obra_id), titulo, ano, artista, tipo, tecnica, dimensoes, localizacao, preco, novo_status, imagem)
+                    return bool(res[0]) if isinstance(res, tuple) else bool(res)
+            except Exception:
+                return False
+        except Exception:
+            return False
+        return False
+
+    def _get_status_da_obra(self, id_obra: int) -> str:
+        try:
+            if hasattr(self.obra_controller, "buscar_obra_por_id"):
+                o = self.obra_controller.buscar_obra_por_id(int(id_obra))
+                if o:
+                    status_raw = getattr(o, "status", None) or (o.get("status") if isinstance(o, dict) else None)
+                    return self._normalizar_status(status_raw)
+        except Exception:
+            pass
+        return ""
+
+    def _obra_ocupada_em_periodo(self, id_obra:int, inicio:Optional[date], fim:Optional[date], exclude_expo_id:Optional[int]=None) -> bool:
+        try:
             expos_all = self.controller.listar() or []
             for ex in expos_all:
                 try:
                     ex_id = getattr(ex,"id_exposicao",None) or (ex.get("id_exposicao") if isinstance(ex,dict) else ex["id_exposicao"])
-                    if exclude_expo_id and int(ex_id)==int(exclude_expo_id): continue
-                    s = self._parse_data(getattr(ex,"data_inicio",None) or (ex.get("data_inicio") if isinstance(ex,dict) else None))
-                    e = self._parse_data(getattr(ex,"data_fim",None) or (ex.get("data_fim") if isinstance(ex,dict) else None))
+                    if exclude_expo_id and int(ex_id) == int(exclude_expo_id): continue
+                    s_raw = getattr(ex,"data_inicio",None) or (ex.get("data_inicio") if isinstance(ex,dict) else None)
+                    e_raw = getattr(ex,"data_fim",None) or (ex.get("data_fim") if isinstance(ex,dict) else None)
+                    s = self._parse_data(str(s_raw)) if s_raw else None
+                    e = self._parse_data(str(e_raw)) if e_raw else None
+                    # obtém ids das obras participantes desta exposição
                     obras = self.controller.listar_obras(ex_id) or []
                     ids = { (getattr(p,"id_obra",None) or (p.get("id_obra") if isinstance(p,dict) else p["id_obra"])) for p in obras }
                     if int(id_obra) not in {int(x) for x in ids}: continue
                     if s and e and inicio and fim:
-                        if not (e < inicio or s > fim): return True
+                        if not (e < inicio or s > fim):
+                            return True
                     else:
-                        # dados incompletos: assume ocupado
+                        # dados incompletos: assume ocupado por segurança
                         return True
-                except Exception: continue
+                except Exception:
+                    continue
         except Exception:
-            # se não conseguimos calcular por controller, tenta verificar pelo status da obra
             try:
-                o = self.obra_controller.carregar(id_obra) if hasattr(self.obra_controller,"carregar") else None
-                status_raw = getattr(o,"status",None) or (o.get("status") if isinstance(o, dict) else "")
-                s = str(status_raw).strip().upper()
-                if "DISPONIVEL" in s or "DISPONÍVEL" in s: return False
+                status_raw = self._get_status_da_obra(id_obra)
+                s = str(status_raw).strip().lower()
+                if "dispon" in s: return False
                 return True
             except Exception:
                 return False
         return False
 
     def _obra_em_qualquer_exposicao_ativa_hoje(self, id_obra:int, exclude_expo_id:Optional[int]=None) -> bool:
-        # verifica ocupação da obra no dia de hoje
         hoje = date.today(); return self._obra_ocupada_em_periodo(id_obra, hoje, hoje, exclude_expo_id=exclude_expo_id)
 
     def _obra_efetivamente_disponivel(self, id_obra:int, periodo_inicio:Optional[date], periodo_fim:Optional[date], exclude_expo_id:Optional[int]=None) -> bool:
-        # checa se a obra está realmente disponível no período considerando status no DB e exposições
-        status_db = self._get_status_da_obra(id_obra).strip().lower() if self._get_status_da_obra(id_obra) else ""
+        status_db = (self._get_status_da_obra(id_obra) or "").strip().lower()
         if not status_db:
             ocupado = self._obra_ocupada_em_periodo(id_obra, periodo_inicio, periodo_fim, exclude_expo_id=exclude_expo_id)
             return not ocupado
@@ -230,7 +204,6 @@ class ExposicaoView:
         return False
 
     def _buscar(self):
-        # constrói filtros a partir dos campos do formulário e delega para controller.buscar
         filtros = {}
         def put(k,val):
             if val: filtros[k]=val
@@ -238,9 +211,9 @@ class ExposicaoView:
         put("status", self.entry_status.get().strip()); put("data_inicio", self.entry_data_inicio.get().strip()); put("data_fim", self.entry_data_fim.get().strip())
         put("data_cadastro", self.entry_data_cadastro.get().strip()); put("descricao", self.text_descricao.get("1.0", tk.END).strip())
         try:
-            if not filtros: self._carregar_lista(); return
+            if not filtros:
+                self._carregar_lista(); return
             resultados = self.controller.buscar(filtros)
-            # limpa tree e popula com resultados
             for i in self.tree.get_children(): self.tree.delete(i)
             for e in resultados:
                 try:
@@ -261,7 +234,6 @@ class ExposicaoView:
             messagebox.showerror("Erro", f"Erro na busca: {ex}")
 
     def _carregar_lista(self):
-        # carrega todas exposições para exibir na treeview
         for i in self.tree.get_children(): self.tree.delete(i)
         expos = self.controller.listar()
         for e in expos:
@@ -279,21 +251,8 @@ class ExposicaoView:
                 status_auto = self._compute_status_from_dates(str(di), str(df))
             status_to_show = status_auto if status_auto else (getattr(e,"status","") or (e.get("status") if isinstance(e,dict) else ""))
             self.tree.insert("", "end", values=(id_ex, nome, tema, local, status_to_show, di, df, dc))
-            try:
-                # para exposiçōes finalizadas, verifica obras e atualiza status
-                if status_to_show == "Finalizada":
-                    obras = self.controller.listar_obras(id_ex) or []
-                    for p in obras:
-                        try:
-                            pid = getattr(p,"id_obra",None) or (p.get("id_obra") if isinstance(p, dict) else p["id_obra"])
-                            if pid is None: continue
-                            if not self._obra_em_qualquer_exposicao_ativa_hoje(int(pid), exclude_expo_id=id_ex):
-                                pass
-                        except Exception: continue
-            except Exception: pass
 
     def _salvar(self):
-        # lê campos do formulário, calcula status automático e chama controller.salvar para persistir
         nome = self.entry_nome.get().strip(); tema = self.entry_tema.get().strip(); local = self.entry_local.get().strip()
         data_inicio = self.entry_data_inicio.get().strip(); data_fim = self.entry_data_fim.get().strip()
         data_cad = self.entry_data_cadastro.get().strip(); desc = self.text_descricao.get("1.0", tk.END).strip()
@@ -302,33 +261,27 @@ class ExposicaoView:
         ok, msg = self.controller.salvar(self._id_atual, nome, tema, local, status_to_save, data_inicio, data_fim, data_cad, desc)
         if ok:
             try:
-                # se mudou para "Em Curso", marca obras como "Em Exposição"
                 new_status = status_to_save
                 if new_status == "Em Curso":
                     obras = self.controller.listar_obras(self._id_atual) or []
                     for p in obras:
-                        try:
-                            pid = getattr(p,"id_obra",None) or (p.get("id_obra") if isinstance(p,dict) else p["id_obra"])
-                            if pid is None: continue
-                            self._set_obra_status(int(pid), "Em Exposição")
-                        except Exception: continue
-                # se está Finalizada ou Planejada, libera obras que não estejam em outras exposições ativas
+                        pid = getattr(p,"id_obra",None) or (p.get("id_obra") if isinstance(p,dict) else None)
+                        if pid is None: continue
+                        self._set_obra_status(int(pid), "Em Exposição")
                 if new_status in ("Finalizada","Planejada"):
                     obras = self.controller.listar_obras(self._id_atual) or []
                     for p in obras:
-                        try:
-                            pid = getattr(p,"id_obra",None) or (p.get("id_obra") if isinstance(p,dict) else p["id_obra"])
-                            if pid is None: continue
-                            if not self._obra_em_qualquer_exposicao_ativa_hoje(int(pid), exclude_expo_id=self._id_atual):
-                                self._set_obra_status(int(pid), "Disponível")
-                        except Exception: continue
-            except Exception: pass
+                        pid = getattr(p,"id_obra",None) or (p.get("id_obra") if isinstance(p,dict) else None)
+                        if pid is None: continue
+                        if not self._obra_em_qualquer_exposicao_ativa_hoje(int(pid), exclude_expo_id=self._id_atual):
+                            self._set_obra_status(int(pid), "Disponível")
+            except Exception:
+                pass
             messagebox.showinfo("Sucesso", msg); self._limpar(); self._carregar_lista()
         else:
             messagebox.showerror("Erro", msg)
 
     def _limpar(self):
-        # limpa formulário
         self._id_atual = None; self._prev_status = None; self._prev_start = None; self._prev_end = None
         try:
             self.entry_nome.delete(0, tk.END); self.entry_tema.delete(0, tk.END); self.entry_local.delete(0, tk.END)
@@ -339,7 +292,6 @@ class ExposicaoView:
         except Exception: pass
 
     def _on_duplo(self, event):
-        # duplo-clique na listagem carrega exposição selecionada para edição
         sel = self.tree.selection();
         if not sel: return
         vals = self.tree.item(sel)["values"]
@@ -347,7 +299,6 @@ class ExposicaoView:
         id_ex = vals[0]; expos = self.controller.carregar(id_ex)
         if not expos: messagebox.showerror("Erro", "Não foi possível carregar exposição."); return
         try:
-            # tenta preencher campos a partir de objeto retornado pelo controller
             e = expos
             self._id_atual = e.id_exposicao
             self.entry_nome.delete(0, tk.END); self.entry_nome.insert(0, e.nome)
@@ -379,8 +330,8 @@ class ExposicaoView:
             self.text_descricao.delete("1.0", tk.END); self.text_descricao.insert("1.0", e.get("descricao","") or "")
             self._prev_status = status_val; self._prev_start = self._parse_data(str(di)) if di else None; self._prev_end = self._parse_data(str(df)) if df else None
 
-    # ---------------- popup selecionador de obras (modal) ----------------
-    def _abrir_popup_adicionar_obra(self):
+    # ---------------- validar exposicao gerenciar obra ----------------
+    def _validar_exposicao(self):
         sel = self.tree.selection()
         if not sel:
             messagebox.showwarning("Aviso", "Selecione uma exposição para adicionar obras.")
@@ -401,6 +352,10 @@ class ExposicaoView:
             messagebox.showerror("Erro", "Não é possível adicionar obras a uma exposição finalizada.")
             return
 
+        self._abrir_gerenciar_obras(id_exposicao, data_inicio, data_fim)
+
+    # ---------------- abertura do modal gerenciar obras ----------------
+    def _abrir_gerenciar_obras(self, id_exposicao: int, data_inicio: Optional[date], data_fim: Optional[date]):
         initial_participacao_ids = set()
         to_add = set()
         to_remove = set()
@@ -430,12 +385,9 @@ class ExposicaoView:
 
         def carregar():
             nonlocal initial_participacao_ids
-            for i in tree.get_children():
-                tree.delete(i)
-
+            for i in tree.get_children(): tree.delete(i)
             participacoes = self.controller.listar_obras(id_exposicao) or []
             initial_participacao_ids = {int(p["id_obra"]) for p in participacoes}
-
             obras = self.obra_controller.listar_obras() or []
             for o in obras:
                 oid = int(o.id_obra)
@@ -443,7 +395,6 @@ class ExposicaoView:
                 artista = str(o.artista) if o.artista is not None else ""
                 status_db = self._normalizar_status(o.status)
 
-                # determinar status_display
                 if oid in to_add or oid in initial_participacao_ids:
                     status_display = "Em Exposição"
                 else:
@@ -457,7 +408,6 @@ class ExposicaoView:
                         else:
                             status_display = status_db or "Disponível"
 
-                # determinar tag
                 if oid in to_add:
                     tag = "to_add"
                 elif oid in to_remove:
@@ -467,7 +417,6 @@ class ExposicaoView:
                 else:
                     tag = "busy" if status_display.lower() != "disponível" else ""
 
-                # texto do título
                 if oid in to_add:
                     display_titulo = f"{titulo} (+)"
                 elif oid in to_remove:
@@ -482,7 +431,7 @@ class ExposicaoView:
         def toggle_adicionar():
             sel_items = tree.selection()
             if not sel_items:
-                messagebox.showwarning("Aviso", "Selecione uma obra para marcar para adicionar.")
+                messagebox.showwarning("Aviso", "Selecione uma obra para adicionar.")
                 return
             nonlocal to_add, to_remove
             changed = False
@@ -490,54 +439,36 @@ class ExposicaoView:
                 values = tree.item(item, "values")
                 id_obra = int(values[0])
                 if id_obra in to_remove:
-                    to_remove.remove(id_obra)
-                    changed = True
-                    continue
+                    to_remove.remove(id_obra); changed = True; continue
                 if id_obra in initial_participacao_ids:
-                    messagebox.showinfo("Info", f"Obra ID {id_obra} já está vinculada à exposição.")
-                    continue
+                    messagebox.showinfo("Info", f"Obra ID {id_obra} já está vinculada à exposição."); continue
                 if not self._obra_efetivamente_disponivel(id_obra, data_inicio, data_fim, exclude_expo_id=id_exposicao):
-                    messagebox.showwarning("Atenção", f"Obra ID {id_obra} não pode ser marcada para adicionar (não disponível).")
-                    continue
-                if id_obra in to_add:
-                    to_add.remove(id_obra)
-                else:
-                    to_add.add(id_obra)
+                    messagebox.showwarning("Atenção", f"Obra ID {id_obra} não pode ser marcada para adicionar (não disponível)."); continue
+                else: to_add.add(id_obra)
                 changed = True
-            if changed:
-                carregar()
+            if changed: carregar()
 
         def toggle_remover():
             sel_items = tree.selection()
             if not sel_items:
-                messagebox.showwarning("Aviso", "Selecione uma obra para marcar para remoção.")
-                return
+                messagebox.showwarning("Aviso", "Selecione uma obra para remover."); return
             nonlocal to_add, to_remove
             changed = False
             for item in sel_items:
-                values = tree.item(item, "values")
-                id_obra = int(values[0])
+                values = tree.item(item, "values"); id_obra = int(values[0])
                 if id_obra in to_add:
-                    to_add.remove(id_obra)
-                    changed = True
-                    continue
+                    to_add.remove(id_obra); changed = True; continue
                 if id_obra not in initial_participacao_ids:
-                    messagebox.showinfo("Info", f"Obra ID {id_obra} não está vinculada atualmente; marque-a para adicionar em vez disso.")
-                    continue
-                if id_obra in to_remove:
-                    to_remove.remove(id_obra)
-                else:
-                    to_remove.add(id_obra)
+                    messagebox.showinfo("Info", f"Obra ID {id_obra} não está vinculada atualmente; marque-a para adicionar em vez disso."); continue
+                else: to_remove.add(id_obra)
                 changed = True
-            if changed:
-                carregar()
+            if changed: carregar()
 
         def confirmar():
             nonlocal id_exposicao
             id_exposicao = int(id_exposicao)
             any_change = False
 
-            # ---- REMOVER ----
             for id_obra in list(to_remove):
                 id_obra = int(id_obra)
                 res = self.controller.remover_obra(id_exposicao, id_obra)
@@ -550,39 +481,24 @@ class ExposicaoView:
                 else:
                     messagebox.showerror("Erro", msg or f"Não foi possível remover obra ID {id_obra}.")
 
-            # ---- ADICIONAR ----
             for id_obra in list(to_add):
                 id_obra = int(id_obra)
                 if not self._obra_efetivamente_disponivel(id_obra, data_inicio, data_fim, exclude_expo_id=id_exposicao):
-                    messagebox.showwarning("Atenção", f"Obra ID {id_obra} não está disponível. Não será adicionada.")
-                    continue
-
+                    messagebox.showwarning("Atenção", f"Obra ID {id_obra} não está disponível. Não será adicionada."); continue
                 ocupado = self._obra_ocupada_em_periodo(id_obra, data_inicio, data_fim, exclude_expo_id=id_exposicao)
                 if ocupado:
-                    messagebox.showwarning("Atenção", f"Obra ID {id_obra} está ocupada em período conflituoso.")
-                    continue
-
+                    messagebox.showwarning("Atenção", f"Obra ID {id_obra} está ocupada em período conflituoso."); continue
                 res = self.controller.adicionar_obra(id_exposicao, id_obra)
                 ok = bool(res[0]) if isinstance(res, tuple) else bool(res)
                 msg = res[1] if isinstance(res, tuple) and len(res) > 1 else None
-
                 if ok:
-                    # atualiza status na aplicação
                     self._set_obra_status(id_obra, "Em Exposição")
-                    try:
-                        if hasattr(self.obra_controller, "db_manager"):
-                            with self.obra_controller.db_manager.cursor() as cur:
-                                cur.execute("UPDATE obras SET status = ? WHERE id_obra = ?", ("Em Exposição", int(id_obra)))
-                    except Exception:
-                        pass
                     any_change = True
                 else:
                     messagebox.showerror("Erro", msg or f"Não foi possível adicionar obra ID {id_obra}.")
 
-            if any_change:
-                messagebox.showinfo("Sucesso", "Alterações aplicadas.")
-            win.destroy()
-            self._carregar_lista()
+            if any_change: messagebox.showinfo("Sucesso", "Alterações aplicadas.")
+            win.destroy(); self._carregar_lista()
 
         # botões
         btns_frame = ttk.Frame(frame)
