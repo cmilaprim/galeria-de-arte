@@ -68,6 +68,13 @@ class RelatorioObrasView(tk.Frame):
             self.transacoes_tree.heading(col, text=txt); self.transacoes_tree.column(col, width=w)
         self.transacoes_tree.pack(fill=tk.BOTH, expand=True)
 
+        # home button
+        frame_home = tk.Frame(filtros_frame, bg="#f0f0f0"); frame_home.place(relx=1, rely=0, x=15, y=-35, anchor="ne")
+        self.btn_home = tk.Button(frame_home, text="❌", font=("Segoe UI Emoji",10), bd=0, highlightthickness=0,
+                                  padx=0, pady=0, bg="#f0f0f0", activebackground="#dddddd", cursor="hand2",
+                                  command=self.voltar_inicio)
+        self.btn_home.pack(expand=True, fill="both")
+
         btns = ttk.Frame(filtros_frame)
         btns.pack(fill=tk.X, pady=6)
         ttk.Button(btns, text="Gerar", command=self.gerar_relatorio).pack(side=tk.RIGHT, padx=6)
@@ -124,6 +131,16 @@ class RelatorioObrasView(tk.Frame):
             self.transacoes_tree.selection_remove(i)
         for i in self.results_tree.get_children():
             self.results_tree.delete(i)
+
+    def voltar_inicio(self):
+        try:
+            from src.views.tela_inicial_view import TelaInicial
+        except Exception as e:
+            messagebox.showerror("Erro", f"Não foi possível voltar à tela inicial:\n{e}")
+            return
+        for widget in self.parent.winfo_children():
+            widget.destroy()
+        TelaInicial(self.parent, self.manager)
 
     def gerar_relatorio(self):
         try:

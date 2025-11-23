@@ -367,7 +367,6 @@ class DatabaseManager:
         if row is None:
             return None
 
-        # Extraindo campos do row (sqlite3.Row ou tupla)
         def get_value(col_name, index):
             if isinstance(row, sqlite3.Row):
                 return row[col_name]
@@ -382,12 +381,10 @@ class DatabaseManager:
         observacoes = get_value("observacoes", 6)
         obras_str = get_value("obras", 7)
 
-        # Parse obras CSV -> lista de strings
         obras = []
         if obras_str:
             obras = [x.strip() for x in obras_str.split(",") if x.strip() != ""]
 
-        # Parse datas para datetime
         data_transacao_dt = None
         data_cadastro_dt = None
 
@@ -702,9 +699,7 @@ class DatabaseManager:
          - ou passar id_exposicao, id_obra (e opcionalmente data_inclusao, observacao) separadamente.
         Retorna (True, lastrowid) ou (False, error_msg).
         """
-        # Extrair valores de forma flexível
         if participacao is not None and id_exposicao is None and id_obra is None:
-            # participacao pode ser dict-like ou objeto com atributos
             try:
                 if isinstance(participacao, dict):
                     id_exposicao = participacao.get("id_exposicao") or participacao.get("id_exposição") or participacao.get("id_expo")
@@ -720,7 +715,6 @@ class DatabaseManager:
             except Exception:
                 pass
 
-        # validação básica
         if id_exposicao is None or id_obra is None:
             return False, "id_exposicao e id_obra são obrigatórios para inserir participação."
 

@@ -3,7 +3,7 @@ from tkinter import ttk, messagebox
 from src.views.obra_view import ObraView
 from src.views.artista_view import ArtistaView
 from src.views.transacao_view import TransacaoView
-#from src.views.cronograma_view import CronogramaView
+from src.views.cronograma_view import CronogramaView
 from src.views.exposicao_view import ExposicaoView
 from src.views.relatorio_obra_view import RelatorioObrasView
 
@@ -115,8 +115,7 @@ class TelaInicial:
         self._open_view(ExposicaoView)
 
     def abrir_cronogramas(self):
-        messagebox.showinfo("Clique", "Abrir Cronogramas ainda não implementado.")
-        #self._open_view(CronogramaView)
+        self._open_view(CronogramaView)
 
     def abrir_relatorios(self):
         self._open_view(RelatorioObrasView)
