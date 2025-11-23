@@ -154,3 +154,13 @@ class ObraDeArte:
     @property
     def data_cadastro(self):
         return self.__data_cadastro
+
+    @data_cadastro.setter
+    def data_cadastro(self, valor):
+        from datetime import date as _date
+        if valor is None:
+            self.__data_cadastro = _date.today()
+            return
+        if not isinstance(valor, _date):
+            raise ValueError("data_cadastro deve ser um datetime.date")
+        self.__data_cadastro = valor

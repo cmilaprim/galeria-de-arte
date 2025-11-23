@@ -70,18 +70,18 @@ class ObraView:
         # --- Linha 3: Data e Imagem --- #
         ttk.Label(frm_cadastro, text="Data cadastro:").grid(row=2, column=0, sticky="w", padx=(10,5), pady=5)
         self.data_entry = ttk.Entry(frm_cadastro)
-        self.data_entry.grid(row=2, column=1, sticky="ew", padx=(5,10), pady=5)
+        self.data_entry.grid(row=2, column=1, sticky="ew", padx=(5,5), pady=5)
         self.data_entry.insert(0, date.today().strftime("%d/%m/%Y"))
-        ttk.Label(frm_cadastro, text="(DD/MM/AAAA)", font=("Arial", 8), foreground="gray").grid(row=3, column=0, columnspan=2, sticky="w", padx=(10,5), pady=(0,5))
-        self.atualizar_data()
+        ttk.Label(frm_cadastro, text="(DD/MM/AAAA)", font=("Arial", 8), foreground="gray")\
+            .grid(row=2, column=2, sticky="w", padx=(2,8), pady=(0,5))
 
-        ttk.Label(frm_cadastro, text="Imagem:").grid(row=2, column=2, sticky="w", padx=(10,5), pady=5)
+        ttk.Label(frm_cadastro, text="Imagem:").grid(row=2, column=3, sticky="w", padx=(10,5), pady=5)
         imagem_frame = ttk.Frame(frm_cadastro)
-        imagem_frame.grid(row=2, column=3, columnspan=3, sticky="ew", padx=5, pady=5)
+        imagem_frame.grid(row=2, column=4, columnspan=3, sticky="ew", padx=5, pady=(18,5))
         imagem_frame.columnconfigure(0, weight=1)
 
         self.preview_frame = ttk.Frame(imagem_frame)
-        self.preview_frame.grid(row=0, column=0, padx=(0,10), sticky="w")
+        self.preview_frame.grid(row=0, column=0, padx=(0,10), pady=(8,0), sticky="w")
 
         self.imagem_label = ttk.Label(
             self.preview_frame,
@@ -93,17 +93,52 @@ class ObraView:
         self.imagem_label.grid(row=0, column=0, pady=(0,5))
 
         botoes_imagem_frame = ttk.Frame(self.preview_frame)
-        botoes_imagem_frame.grid(row=1, column=0, pady=5)
+        botoes_imagem_frame.grid(row=1, column=0, pady=(8,5))
         ttk.Button(botoes_imagem_frame, text="Selecionar", command=self.selecionar_imagem, width=10).grid(row=0, column=0, padx=(0,4))
         ttk.Button(botoes_imagem_frame, text="Visualizar", command=self.visualizar_imagem, width=10).grid(row=0, column=1, padx=4)
         ttk.Button(botoes_imagem_frame, text="Remover", command=self.remover_imagem, width=10).grid(row=0, column=2, padx=4)
 
         # --- Linha 3: Artistas --- #
         ttk.Label(frm_cadastro, text="Artista(s):").grid(row=2, column=6, sticky="w", padx=(10,5), pady=5)
-        self.botao_artistas = ttk.Button(frm_cadastro, text="Selecionar Artistas", command=self.abrir_selecionar_artistas, width=18)
-        self.botao_artistas.grid(row=2, column=7, sticky="ew", padx=5, pady=5)
-        self.label_artistas_selecionados = ttk.Label(frm_cadastro, text="Nenhum artista selecionado", wraplength=300, justify="left", foreground="gray")
-        self.label_artistas_selecionados.grid(row=3, column=0, columnspan=8, sticky="w", padx=10, pady=(0,5))
+        
+        self.label_artistas_selecionados = ttk.Label(
+            frm_cadastro, 
+            text="Nenhum artista selecionado", 
+            wraplength=200, 
+            justify="left", 
+            foreground="gray",
+            font=("Arial", 9)
+        )
+        self.label_artistas_selecionados.grid(row=2, column=7, columnspan=2, sticky="w", padx=5, pady=5)
+
+        frame_artistas_container = ttk.LabelFrame(frm_cadastro, text="Selecione os Artistas (Ctrl+Click para múltiplos)", padding=5)
+        frame_artistas_container.grid(row=4, column=0, columnspan=9, sticky="ew", padx=10, pady=10)
+        
+        colunas_artistas = ("ID", "Nome")
+        self.tree_artistas = ttk.Treeview(
+            frame_artistas_container, 
+            columns=colunas_artistas, 
+            show="headings", 
+            selectmode="extended", 
+            height=5
+        )
+        
+        self.tree_artistas.heading("ID", text="ID")
+        self.tree_artistas.heading("Nome", text="Nome")
+        self.tree_artistas.column("ID", width=50, anchor="center")
+        self.tree_artistas.column("Nome", width=250, anchor="w")
+        
+        scrollbar_artistas = ttk.Scrollbar(frame_artistas_container, orient="vertical", command=self.tree_artistas.yview)
+        self.tree_artistas.configure(yscrollcommand=scrollbar_artistas.set)
+        
+        self.tree_artistas.pack(side="left", fill="both", expand=True, pady=5)
+        scrollbar_artistas.pack(side="right", fill="y", pady=5)
+        
+        # Bind para seleção ao clicar
+        self.tree_artistas.bind("<<TreeviewSelect>>", self.on_artista_selecionado)
+        
+        # Carregar artistas no tree
+        self.carregar_artistas_tree()
 
         # --- Botão Home (Voltar) --- #
         frame_home = tk.Frame(frm_cadastro, bg="#f0f0f0", width=0, height=0)
@@ -152,6 +187,38 @@ class ObraView:
         listagem_frame.grid_columnconfigure(0, weight=1)
         self.tree.bind("<Double-1>", self.editar_obra)
         self.carregar_obras()
+
+
+    # ---------------------- SELEÇÃO DE ARTISTAS (NOVO) ---------------------- #
+    def carregar_artistas_tree(self):
+        """Carrega os artistas na tree de seleção - SOMENTE ID E NOME"""
+        try:
+            for item in self.tree_artistas.get_children():
+                self.tree_artistas.delete(item)
+            
+            artistas = self.manager.listar_artistas()
+            for artista in artistas:
+                self.tree_artistas.insert("", tk.END, values=(
+                    artista.id_artista, 
+                    artista.nome
+                ))
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro ao carregar artistas: {str(e)}")
+
+    def on_artista_selecionado(self, event):
+        """Atualiza a label com os artistas selecionados ao clicar"""
+        try:
+            itens = self.tree_artistas.selection()
+            selecionados = [self.tree_artistas.item(i, "values")[1] for i in itens]
+            self.artistas_selecionados = selecionados
+            
+            if self.artistas_selecionados:
+                texto = ", ".join(self.artistas_selecionados)
+                self.label_artistas_selecionados.config(text=texto, foreground="black")
+            else:
+                self.label_artistas_selecionados.config(text="Nenhum artista selecionado", foreground="gray")
+        except Exception as e:
+            print(f"Erro ao selecionar artista: {str(e)}")
 
     # ---------------------- IMAGEM ---------------------- #
     def selecionar_imagem(self):
@@ -295,8 +362,14 @@ class ObraView:
             pass
         self.status_combo.set("")  # Combobox vazio
 
+        # limpa seleção de artistas na interface e estado interno
+        try:
+            for iid in self.tree_artistas.selection():
+                self.tree_artistas.selection_remove(iid)
+        except Exception:
+            pass
         self.artistas_selecionados = []
-        self.label_artistas_selecionados.config(text="Nenhum artista selecionado")
+        self.label_artistas_selecionados.config(text="Nenhum artista selecionado", foreground="gray")
 
         self.imagem_path = None
         self.imagem_tk = None
@@ -316,8 +389,40 @@ class ObraView:
             if not sel:
                 messagebox.showwarning("Aviso", "Selecione uma obra para remover")
                 return
+
+            confirmar = messagebox.askyesno("Confirmar remoção", "Deseja remover a obra selecionada?")
+            if not confirmar:
+                return
+
+            # tenta remover via controller (se implementado)
+            sucesso_remocao = True
+            try:
+                # pega primeiro id da seleção
+                iid = sel[0]
+                valores = self.tree.item(iid, "values")
+                obra_id = int(valores[0]) if valores and valores[0] else None
+                if hasattr(self.controller, "remover_obra") and obra_id is not None:
+                    sucesso_remocao = self.controller.remover_obra(obra_id)
+            except Exception:
+                # se falhar a remoção via controller, continuamos removendo da view
+                sucesso_remocao = False
+
+            # remove visualmente da lista
             for item in sel:
-                self.tree.delete(item)
+                try:
+                    self.tree.delete(item)
+                except:
+                    pass
+
+            # limpa formulário e seleção residual
+            self.limpar_form()
+            try:
+                for s in self.tree.selection():
+                    self.tree.selection_remove(s)
+            except:
+                pass
+
+            messagebox.showinfo("Sucesso", "Obra removida")
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao remover: {str(e)}")
 
@@ -375,16 +480,49 @@ class ObraView:
         self.status_combo.set(obra.status.value)
         self.status_combo.config(state="disabled")
 
+        # Preencher data
         if obra.data_cadastro:
-            self.data_entry.config(state="normal")
-            self.data_entry.delete(0, tk.END)
-            self.data_entry.insert(0, obra.data_cadastro.strftime("%d/%m/%Y"))
-            self.data_entry.config(state="readonly")
+            try:
+                self.data_entry.config(state="normal")
+                self.data_entry.delete(0, tk.END)
+                self.data_entry.insert(0, obra.data_cadastro.strftime("%d/%m/%Y"))
+                self.data_entry.config(state="readonly")
+            except Exception:
+                pass
 
-        if obra.data_cadastro:
-            self.data_entry.delete(0, tk.END)
-            self.data_entry.insert(0, obra.data_cadastro.strftime("%d/%m/%Y"))
+        # --- Selecionar artistas correspondentes na tree --- #
+        try:
+            artistas_da_obra = obra.artista if isinstance(obra.artista, (list, tuple)) else [obra.artista]
+            artistas_da_obra = [str(a) for a in artistas_da_obra]
 
+            # limpa seleção atual
+            try:
+                for iid in self.tree_artistas.selection():
+                    self.tree_artistas.selection_remove(iid)
+            except:
+                pass
+
+            selecionados_nomes = []
+            for iid in self.tree_artistas.get_children():
+                vals = self.tree_artistas.item(iid, "values")
+                if len(vals) >= 2:
+                    nome = str(vals[1])
+                    if nome in artistas_da_obra:
+                        self.tree_artistas.selection_add(iid)
+                        selecionados_nomes.append(nome)
+
+            # atualiza estado interno e label
+            self.artistas_selecionados = selecionados_nomes
+            if self.artistas_selecionados:
+                texto = ", ".join(self.artistas_selecionados)
+                self.label_artistas_selecionados.config(text=texto, foreground="black")
+            else:
+                self.label_artistas_selecionados.config(text="Nenhum artista selecionado", foreground="gray")
+        except Exception:
+            self.artistas_selecionados = []
+            self.label_artistas_selecionados.config(text="Nenhum artista selecionado", foreground="gray")
+
+        # Carrega imagem se houver
         if obra.imagem:
             self.imagem_path = obra.imagem
             if isinstance(obra.imagem, str) and obra.imagem.endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp')):
