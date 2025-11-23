@@ -13,7 +13,10 @@ class ObraDeArte:
         self.__id_obra = id_obra
         self.__titulo = titulo
         self.__ano = ano
-        self.__artista = artista
+        if isinstance(artista, str):
+            self.__artista = [a.strip() for a in artista.split(",") if a.strip()]
+        else:
+            self.__artista = list(artista) if artista is not None else []
         self.__tipo = tipo
         self.__tecnica = tecnica
         self.__dimensoes = dimensoes
@@ -54,10 +57,32 @@ class ObraDeArte:
     
     @artista.setter
     def artista(self, artista):
-        if not artista:
+        if not artista or (isinstance(artista, (list, tuple)) and len(artista) == 0):
             raise ValueError("Artista não pode estar vazio!")
-        self.__artista = artista
+        if isinstance(artista, str):
+            self.__artista = [a.strip() for a in artista.split(",") if a.strip()]
+        else:
+            self.__artista = list(artista)
     
+    @property
+    def artistas_str(self):
+        """
+        Retorna os artistas formatados como "A, B, C".
+        Trata list, tuple, dict ou outros tipos e evita retornar "{}" ou "[]".
+        """
+        a = self.__artista
+        if not a:
+            return ""
+        if isinstance(a, (list, tuple)):
+            return ", ".join(str(x) for x in a if x is not None and str(x).strip() != "")
+        if isinstance(a, dict):
+            vals = [str(v) for v in a.values() if v is not None and str(v).strip() != ""]
+            if vals:
+                return ", ".join(vals)
+            return ", ".join(str(k) for k in a.keys())
+        s = str(a).strip()
+        return s if s not in ("{}", "[]") else ""
+        
     @property
     def tipo(self):
         return self.__tipo

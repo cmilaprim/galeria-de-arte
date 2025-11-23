@@ -11,6 +11,13 @@ class ObraController:
             if not titulo or not tipo or not tecnica or not dimensoes or not localizacao or not artista:
                 return False, "Todos os campos obrigatórios devem ser preenchidos"
 
+            if isinstance(artista, str):
+                artistas_list = [a.strip() for a in artista.split(",") if a.strip()]
+            else:
+                artistas_list = list(artista)
+            if len(artistas_list) == 0:
+                return False, "Adicione pelo menos um artista"
+
             try:
                 ano_int = int(ano)
                 if ano_int > date.today().year:
@@ -25,7 +32,7 @@ class ObraController:
             except ValueError:
                 return False, "Preço deve ser um valor numérico válido"
             
-            if self.db_manager.verificar_obra_existe(titulo, artista, ano_int):
+            if self.db_manager.verificar_obra_existe(titulo, artistas_list, ano_int):
                 return False, "Já existe uma obra com esse título, artista e ano"
             
             obra_id = self.db_manager.get_next_obra_id()
@@ -33,7 +40,7 @@ class ObraController:
                 id_obra=obra_id,
                 titulo=titulo,
                 ano=ano_int,
-                artista=artista,
+                artista=artistas_list,
                 tipo=tipo,
                 tecnica=tecnica,
                 dimensoes=dimensoes,
@@ -49,7 +56,6 @@ class ObraController:
             
         except Exception as e:
             return False, f"Erro ao cadastrar obra: {str(e)}"
-    
     def listar_obras(self):
         """retorna lista de todas as obras cadastradas (RF01)"""
         return self.db_manager.listar_todas_obras()
@@ -72,13 +78,16 @@ class ObraController:
             
             obra.titulo = titulo
             obra.ano = int(ano)
-            obra.artista = artista
+            # garante artista como lista
+            if isinstance(artista, str):
+                obra.artista = [a.strip() for a in artista.split(",") if a.strip()]
+            else:
+                obra.artista = list(artista)
             obra.tipo = tipo
             obra.tecnica = tecnica
             obra.dimensoes = dimensoes
             obra.localizacao = localizacao
             obra.preco = float(preco) if preco else 0
-            obra.status = status
             if imagem:
                 obra.imagem = imagem
                 

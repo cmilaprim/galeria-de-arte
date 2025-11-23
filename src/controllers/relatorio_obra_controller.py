@@ -40,10 +40,10 @@ class RelatorioController:
         try:
             ano_int = int(ano)
             ano_atual = datetime.now().year
-            
-            if ano_int > ano_atual:  
+
+            if ano_int > ano_atual:
                 raise ValueError(f"Ano inválido: não pode ser posterior a {ano_atual}")
-                
+
             return ano_int
         except ValueError as e:
             if "invalid literal for int" in str(e):
@@ -123,7 +123,6 @@ class RelatorioController:
             if "artistas" in filtros_brutos and filtros_brutos["artistas"]:
                 filtros_validados["artistas"] = filtros_brutos["artistas"]
             
-            # Adicione este bloco para validar transações
             if "transacoes" in filtros_brutos and filtros_brutos["transacoes"]:
                 filtros_validados["transacoes"] = filtros_brutos["transacoes"]
             
@@ -205,22 +204,31 @@ class RelatorioController:
 
             artistas_sel = filtros.get("artistas")
             if ok and artistas_sel:
-                nome_artista = (obra.artista or "").lower()
-                if not any(a.strip().lower() in nome_artista for a in artistas_sel):
-                    ok = False
+                if isinstance(obra.artista, (list, tuple)):
+                    if not any(sel.strip().lower() in art.lower() for sel in artistas_sel for art in obra.artista):
+                        ok = False
+                else:
+                    nome_artista = (obra.artista or "").lower()
+                    if not any(sel.strip().lower() in nome_artista for sel in artistas_sel):
+                        ok = False
             
             transacoes_sel = filtros.get("transacoes")
             if ok and transacoes_sel:
                 transacoes_obra = []
                 for transacao in self.transacao_ctrl.listar_transacoes():
-                    if str(obra.id_obra) in transacao.obras:
-                        transacoes_obra.append(transacao.cliente)
+                    if obra.titulo in transacao.obras:
+                        transacoes_obra.append(transacao.tipo)
                 
-                if not any(cliente in transacoes_sel for cliente in transacoes_obra):
+                if not any(tipo in transacoes_sel for tipo in transacoes_obra):
                     ok = False
 
-
             if ok:
+                transacoes_da_obra = []
+                for transacao in self.transacao_ctrl.listar_transacoes():
+                    if obra.titulo in transacao.obras:
+                        transacoes_da_obra.append(transacao.cliente)
+                
+                obra.transacao = ", ".join(transacoes_da_obra) if transacoes_da_obra else ""
                 resultado.append(obra)
 
         return resultado

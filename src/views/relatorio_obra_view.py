@@ -23,7 +23,7 @@ class RelatorioObrasView(tk.Frame):
     def create_widgets(self):
         main = ttk.Frame(self, padding=8)
         main.pack(fill=tk.BOTH, expand=True)
-
+        
         filtros_frame = ttk.LabelFrame(main, text="Filtros", padding=8)
         filtros_frame.pack(fill=tk.X, padx=5, pady=5)
 
@@ -96,9 +96,12 @@ class RelatorioObrasView(tk.Frame):
         self.carregar_transacoes()
 
     def carregar_artistas(self):
-        for i in self.artistas_tree.get_children(): self.artistas_tree.delete(i)
+        for i in self.artistas_tree.get_children():
+            self.artistas_tree.delete(i)
         for a in self.controller.listar_artistas():
-            self.artistas_tree.insert("", tk.END, values=(getattr(a, "id_artista", None), getattr(a, "nome", "")))
+            aid = getattr(a, "id_artista", "")
+            nome = getattr(a, "nome", "") or ""
+            self.artistas_tree.insert("", "end", values=(aid, nome))
 
     def carregar_transacoes(self):
         for i in self.transacoes_tree.get_children(): self.transacoes_tree.delete(i)
@@ -107,85 +110,95 @@ class RelatorioObrasView(tk.Frame):
             self.transacoes_tree.insert("", tk.END, values=(getattr(t, "tipo", ""), getattr(t, "cliente", ""), f"R$ {valor:.2f}"))
 
     def limpar_filtros(self):
-        for e in (self.ano_entry, self.titulo_entry, self.tecnica_entry, self.localizacao_entry, self.valor_entry, self.data_cadastro_entry):
-            e.delete(0, tk.END)
+        self.ano_entry.delete(0, "end")
+        self.titulo_entry.delete(0, "end")
+        self.tecnica_entry.delete(0, "end")
         self.tipo_combo.set("")
         self.status_combo.set("")
-        for i in self.results_tree.get_children(): self.results_tree.delete(i)
-        # limpar seleções
-        try:
-            self.artistas_tree.selection_remove(self.artistas_tree.selection())
-            self.transacoes_tree.selection_remove(self.transacoes_tree.selection())
-        except Exception:
-            pass
+        self.localizacao_entry.delete(0, "end")
+        self.valor_entry.delete(0, "end")
+        self.data_cadastro_entry.delete(0, "end")
+        for i in self.artistas_tree.selection():
+            self.artistas_tree.selection_remove(i)
+        for i in self.transacoes_tree.selection():
+            self.transacoes_tree.selection_remove(i)
+        for i in self.results_tree.get_children():
+            self.results_tree.delete(i)
 
     def gerar_relatorio(self):
-        filtros_brutos = {
-            "ano": self.ano_entry.get().strip(),
-            "titulo": self.titulo_entry.get().strip(),
-            "tecnica": self.tecnica_entry.get().strip(),
-            "tipo": self.tipo_combo.get().strip(),
-            "status": self.status_combo.get().strip(),
-            "localizacao": self.localizacao_entry.get().strip(),
-            "valor": self.valor_entry.get().strip(),
-            "data_cadastro": self.data_cadastro_entry.get().strip()
-        }
-        
-        filtros_brutos = {k: v for k, v in filtros_brutos.items() if v}
-        
-        artistas_sel = []
-        for iid in self.artistas_tree.selection():
-            v = self.artistas_tree.item(iid, "values")
-            if v and len(v) >= 2:
-                artistas_sel.append(v[1])
-        if artistas_sel:
-            filtros_brutos["artistas"] = artistas_sel
-            
-        transacoes_sel = []
-        for iid in self.transacoes_tree.selection():
-            v = self.transacoes_tree.item(iid, "values")
-            if v and len(v) >= 2:
-                transacoes_sel.append(v[1]) 
-        if transacoes_sel:
-            filtros_brutos["transacoes"] = transacoes_sel
-                
         try:
-            obras = self.controller.buscar_obras_validado(filtros_brutos)
-            
-            for i in self.results_tree.get_children(): 
+            filtros = {}
+            if self.ano_entry.get().strip():
+                filtros["ano"] = self.ano_entry.get().strip()
+            if self.titulo_entry.get().strip():
+                filtros["titulo"] = self.titulo_entry.get().strip()
+            if self.tecnica_entry.get().strip():
+                filtros["tecnica"] = self.tecnica_entry.get().strip()
+            if self.tipo_combo.get().strip():
+                filtros["tipo"] = self.tipo_combo.get().strip()
+            if self.status_combo.get().strip():
+                filtros["status"] = self.status_combo.get().strip()
+            if self.localizacao_entry.get().strip():
+                filtros["localizacao"] = self.localizacao_entry.get().strip()
+            if self.valor_entry.get().strip():
+                filtros["valor"] = self.valor_entry.get().strip()
+            if self.data_cadastro_entry.get().strip():
+                filtros["data_cadastro"] = self.data_cadastro_entry.get().strip()
+
+            sel_artistas = []
+            for iid in self.artistas_tree.selection():
+                vals = self.artistas_tree.item(iid, "values")
+                if vals:
+                    sel_artistas.append(str(vals[1]))
+            if sel_artistas:
+                filtros["artistas"] = sel_artistas
+
+            sel_trans = []
+            for iid in self.transacoes_tree.selection():
+                vals = self.transacoes_tree.item(iid, "values")
+                if vals:
+                    sel_trans.append(str(vals[0]))
+            if sel_trans:
+                filtros["transacoes"] = sel_trans
+
+            obras = self.controller.buscar_obras_validado(filtros)
+            for i in self.results_tree.get_children():
                 self.results_tree.delete(i)
-                
-            for o in obras:
-                preco = f"R$ {float(getattr(o, 'preco', 0) or 0):.2f}" if getattr(o, "preco", None) is not None else ""
-                
-                transacoes_relacionadas = []
-                for t in self.controller.listar_transacoes():
-                    if str(o.id_obra) in t.obras:
-                        transacoes_relacionadas.append(t.cliente)
-                
-                if transacoes_relacionadas:
-                    transacao_txt = ", ".join(transacoes_relacionadas)
-                else:
-                    transacao_txt = "Sem transação"
-                status_txt = getattr(o.status, "value", "") if o.status is not None else ""
-                
-                self.results_tree.insert("", tk.END, values=(
-                    getattr(o, "id_obra", None),
-                    getattr(o, "titulo", ""),
-                    getattr(o, "artista", ""),
-                    getattr(o, "tipo", ""),
-                    getattr(o, "ano", ""),
-                    getattr(o, "tecnica", ""),
+
+            for obra in obras:
+                artistas_text = getattr(obra, "artistas_str", None)
+                if artistas_text is None or artistas_text == "":
+                    a = getattr(obra, "artista", "")
+                    if isinstance(a, (list, tuple)):
+                        artistas_text = ", ".join(str(x) for x in a if x)
+                    else:
+                        artistas_text = str(a) if a else ""
+                status_txt = getattr(obra.status, "value", "") if obra.status is not None else ""
+                trans_txt = getattr(obra, "transacao", "") if hasattr(obra, "transacao") else ""
+                valor = getattr(obra, "preco", 0.0) or 0.0
+
+                self.results_tree.insert("", "end", values=(
+                    obra.id_obra,
+                    obra.titulo or "",
+                    artistas_text,
+                    obra.tipo or "",
+                    getattr(obra, "ano", ""),
+                    obra.tecnica or "",
                     status_txt,
-                    transacao_txt,
-                    getattr(o, "localizacao", ""),
-                    preco
+                    trans_txt,
+                    obra.localizacao or "",
+                    f"R$ {float(valor):.2f}".replace(".", ",")
                 ))
-                
-            messagebox.showinfo("Relatório", f"{len(obras)} obras encontradas.")
             
-        except ValueError as e:
-            messagebox.showerror("Erro de validação", str(e))
+            # ✅ ADICIONA mensagem com total de obras encontradas
+            total = len(obras)
+            if total == 0:
+                messagebox.showinfo("Relatório", "Nenhuma obra encontrada com os filtros aplicados.")
+            else:
+                messagebox.showinfo("Relatório", f"Relatório gerado com sucesso!\n{total} obra(s) encontrada(s).")
+                
+        except Exception as e:
+            messagebox.showerror("Erro", f"Falha ao gerar relatório: {e}")
 
 # execução independente para teste
 if __name__ == "__main__":

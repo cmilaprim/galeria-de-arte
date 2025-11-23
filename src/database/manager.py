@@ -1,5 +1,6 @@
 import sqlite3
 import os
+import json
 from datetime import datetime, date
 from contextlib import contextmanager
 from typing import Optional, Any
@@ -118,12 +119,15 @@ class DatabaseManager:
             INSERT INTO obras (id_obra, titulo, ano, nome_artista, tipo, tecnica, dimensoes, localizacao, preco, status, imagem, data_cadastro)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         '''
-        data_cad = obra.data_cadastro.isoformat() if hasattr(obra.data_cadastro, "isoformat") else obra.data_cadastro
+        data_cad_obj = obra.data_cadastro or date.today()
+        data_cad = data_cad_obj.isoformat() if hasattr(data_cad_obj, "isoformat") else data_cad_obj
+
+        nome_artista_json = json.dumps(obra.artista, ensure_ascii=False) if isinstance(obra.artista, (list, tuple)) else json.dumps([obra.artista], ensure_ascii=False)
         valores = (
             obra.id_obra,
             obra.titulo,
             obra.ano,
-            obra.artista,
+            nome_artista_json,
             obra.tipo,
             obra.tecnica,
             obra.dimensoes,
@@ -165,21 +169,24 @@ class DatabaseManager:
                 dimensoes = ?, localizacao = ?, preco = ?, status = ?, imagem = ?
             WHERE id_obra = ?
         '''
+        nome_artista_json = json.dumps(obra.artista, ensure_ascii=False) if isinstance(obra.artista, (list, tuple)) else json.dumps([obra.artista], ensure_ascii=False)
         valores = (
-            obra.titulo, obra.ano, obra.artista, obra.tipo, obra.tecnica,
+            obra.titulo, obra.ano, nome_artista_json, obra.tipo, obra.tecnica,
             obra.dimensoes, obra.localizacao, obra.preco, obra.status.value,
             obra.imagem, obra.id_obra
         )
         with self.cursor() as cursor:
             cursor.execute(sql, valores)
-
-    def verificar_obra_existe(self, titulo: str, artista: str, ano: int) -> bool:
+            
+    def verificar_obra_existe(self, titulo: str, artista, ano: int) -> bool:
+        artistas_norm = artista if isinstance(artista, (list, tuple)) else ([artista] if artista else [])
+        artista_json = json.dumps(artistas_norm, ensure_ascii=False)
         with self.conectar() as con:
             cursor = con.cursor()
             cursor.execute('''
                 SELECT count(*) FROM obras
                 WHERE titulo = ? AND nome_artista = ? AND ano = ?
-            ''', (titulo, artista, ano))
+            ''', (titulo, artista_json, ano))
             resultado = cursor.fetchone()[0]
         return resultado > 0
 
@@ -214,11 +221,26 @@ class DatabaseManager:
                 except Exception:
                     data_cadastro = None
 
+        artistas_list = []
+        if nome_artista:
+            if isinstance(nome_artista, str):
+                nome_artista_str = nome_artista.strip()
+                try:
+                    parsed = json.loads(nome_artista_str)
+                    if isinstance(parsed, list):
+                        artistas_list = [str(a) for a in parsed]
+                    else:
+                        artistas_list = [str(parsed)]
+                except Exception:
+                    artistas_list = [a.strip() for a in nome_artista_str.split(",") if a.strip()]
+            else:
+                artistas_list = [str(nome_artista)]
+
         return ObraDeArte(
             id_obra=id_obra,
             titulo=titulo,
             ano=ano,
-            artista=nome_artista,
+            artista=artistas_list,
             tipo=tipo,
             tecnica=tecnica,
             dimensoes=dimensoes,

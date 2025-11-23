@@ -127,7 +127,7 @@ class ObraView:
         self.botao_salvar = ttk.Button(btns_frame, text="Salvar", command=self.salvar_obra, width=16)
         self.botao_salvar.pack(pady=4)
         ttk.Button(btns_frame, text="Cancelar", command=self.limpar_form, width=16).pack(pady=4)
-        #ttk.Button(btns_frame, text="Buscar", command=self.carregar_obras, width=16).pack(pady=4)
+        ttk.Button(btns_frame, text="Remover", command=self.remover_visual, width=16).pack(pady=4)
 
         # --- FRAME DE LISTAGEM --- #
         listagem_frame = ttk.LabelFrame(self.root, text="Listagem de Obras", padding=10)
@@ -243,7 +243,7 @@ class ObraView:
         try:
             titulo = self.titulo_entry.get().strip()
             ano = self.ano_entry.get().strip()
-            artistas = self.obter_artistas()
+            artistas = self.obter_artistas()  # já é lista
             tipo = self.tipo_combo.get()
             tecnica = self.tecnica_entry.get().strip()
             dimensoes = self.dimensoes_entry.get().strip()
@@ -255,18 +255,15 @@ class ObraView:
                 messagebox.showerror("Erro", "Adicione pelo menos um artista")
                 return
 
-            artista_str = ", ".join(artistas)
-
             if hasattr(self, 'obra_em_edicao') and self.obra_em_edicao:
-                # ao editar, mantém o status atual
                 status = self.obra_em_edicao.status
                 sucesso, mensagem = self.controller.atualizar_obra(
-                    self.obra_em_edicao.id_obra, titulo, ano, artista_str, tipo, 
+                    self.obra_em_edicao.id_obra, titulo, ano, artistas, tipo, 
                     tecnica, dimensoes, localizacao, preco, status, self.imagem_path
                 )
             else:
                 sucesso, mensagem = self.controller.cadastrar_obra(
-                    titulo, ano, artista_str, tipo, tecnica, dimensoes, 
+                    titulo, ano, artistas, tipo, tecnica, dimensoes, 
                     localizacao, preco, status, self.imagem_path
                 )
 
@@ -289,6 +286,10 @@ class ObraView:
         self.localizacao_entry.delete(0, tk.END)
         self.preco_entry.delete(0, tk.END)
         self.preco_entry.insert(0, "0.00")
+        try:
+            self.status_combo.config(state="readonly")
+        except:
+            pass
         self.status_combo.set("")  # Combobox vazio
 
         self.artistas_selecionados = []
@@ -306,6 +307,17 @@ class ObraView:
         if hasattr(self, 'botao_salvar'):
             self.botao_salvar.config(text="Salvar")
 
+    def remover_visual(self):
+        try:
+            sel = self.tree.selection()
+            if not sel:
+                messagebox.showwarning("Aviso", "Selecione uma obra para remover")
+                return
+            for item in sel:
+                self.tree.delete(item)
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro ao remover: {str(e)}")
+
     def carregar_obras(self):
         try:
             for item in self.tree.get_children():
@@ -313,29 +325,30 @@ class ObraView:
 
             obras = self.controller.listar_obras()
             for obra in obras:
+                artistas_text = obra.artistas_str
                 self.tree.insert("", tk.END, values=(
-                    obra.id_obra,
-                    obra.titulo,
-                    obra.artista,
-                    obra.tipo,
-                    obra.ano,
-                    obra.tecnica,
-                    obra.dimensoes,
-                    obra.localizacao,
-                    f"R$ {obra.preco:.2f}".replace(".", ",")
-                ))
+                     obra.id_obra,
+                     obra.titulo,
+                     artistas_text,
+                     obra.tipo,
+                     obra.ano,
+                     obra.tecnica,
+                     obra.dimensoes,
+                     obra.localizacao,
+                     f"R$ {obra.preco:.2f}".replace(".", ",")
+                 ))
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao carregar obras: {str(e)}")
 
     def editar_obra(self, event):
         try:
             item = self.tree.selection()[0]
-            obra_id = self.tree.item(item, "values")[0]
+            obra_id = int(self.tree.item(item, "values")[0])
             obra = self.controller.buscar_obra_por_id(obra_id)
             if not obra:
                 messagebox.showerror("Erro", "Obra não encontrada")
                 return
-            if obra.status.value == "Vendida":
+            if obra.status.value == "Vendida" or obra.status == StatusObra.VENDIDA:
                 messagebox.showwarning("Aviso", "Obras vendidas não podem ser editadas")
                 return
             self.preencher_formulario_edicao(obra)
@@ -356,8 +369,8 @@ class ObraView:
         self.localizacao_entry.insert(0, obra.localizacao or "")
         self.preco_entry.delete(0, tk.END)
         self.preco_entry.insert(0, str(obra.preco))
-        # mantém status atual da obra ao editar
         self.status_combo.set(obra.status.value)
+        self.status_combo.config(state="disabled")
 
         if obra.data_cadastro:
             self.data_entry.config(state="normal")
@@ -366,7 +379,7 @@ class ObraView:
             self.data_entry.config(state="readonly")
 
         if obra.artista:
-            self.artistas_selecionados = [a.strip() for a in obra.artista.split(',') if a.strip()]
+            self.artistas_selecionados = list(obra.artista) if isinstance(obra.artista, (list, tuple)) else [str(obra.artista)]
             texto = "Artistas Selecionados: " + ", ".join(self.artistas_selecionados) \
                     if self.artistas_selecionados else "Nenhum artista selecionado"
             self.label_artistas_selecionados.config(text=texto)
