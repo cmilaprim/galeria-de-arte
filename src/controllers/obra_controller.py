@@ -6,7 +6,7 @@ class ObraController:
     def __init__(self):
         self.db_manager = DatabaseManager()
         
-    def cadastrar_obra(self, titulo, ano, artista, tipo, tecnica, dimensoes, localizacao, preco, status, imagem=None):
+    def cadastrar_obra(self, titulo, ano, artista, tipo, tecnica, dimensoes, localizacao, preco, status, imagem=None, data_cadastro=None):
         try:
             if not titulo or not tipo or not tecnica or not dimensoes or not localizacao or not artista:
                 return False, "Todos os campos obrigatórios devem ser preenchidos"
@@ -32,6 +32,18 @@ class ObraController:
             except ValueError:
                 return False, "Preço deve ser um valor numérico válido"
             
+            # Validar e converter data de cadastro
+            if data_cadastro:
+                try:
+                    from datetime import datetime
+                    data_obj = datetime.strptime(data_cadastro, "%d/%m/%Y").date()
+                    if data_obj > date.today():
+                        return False, "Data de cadastro não pode ser futura"
+                except ValueError:
+                    return False, "Data de cadastro inválida. Use o formato DD/MM/AAAA"
+            else:
+                data_obj = date.today()
+            
             if self.db_manager.verificar_obra_existe(titulo, artistas_list, ano_int):
                 return False, "Já existe uma obra com esse título, artista e ano"
             
@@ -48,7 +60,7 @@ class ObraController:
                 preco=preco_float,
                 status=StatusObra.DISPONIVEL if status is None else status,
                 imagem=imagem,
-                data_cadastro=date.today()
+                data_cadastro=data_obj
             )
             
             self.db_manager.inserir_obra(obra)
@@ -56,6 +68,7 @@ class ObraController:
             
         except Exception as e:
             return False, f"Erro ao cadastrar obra: {str(e)}"
+    
     def listar_obras(self):
         """retorna lista de todas as obras cadastradas (RF01)"""
         return self.db_manager.listar_todas_obras()
@@ -64,7 +77,7 @@ class ObraController:
         """busca uma obra pelo ID"""
         return self.db_manager.buscar_obra_por_id(obra_id)
     
-    def atualizar_obra(self, obra_id, titulo, ano, artista, tipo, tecnica, dimensoes, localizacao, preco, status, imagem=None):
+    def atualizar_obra(self, obra_id, titulo, ano, artista, tipo, tecnica, dimensoes, localizacao, preco, status, imagem=None, data_cadastro=None):
         try:
             obra = self.buscar_obra_por_id(obra_id)
             if not obra:
@@ -76,9 +89,19 @@ class ObraController:
             if not titulo or not tipo or not tecnica or not dimensoes or not localizacao or not artista:
                 return False, "Todos os campos obrigatórios devem ser preenchidos"
             
+            # Validar e atualizar data de cadastro se fornecida
+            if data_cadastro:
+                try:
+                    from datetime import datetime
+                    data_obj = datetime.strptime(data_cadastro, "%d/%m/%Y").date()
+                    if data_obj > date.today():
+                        return False, "Data de cadastro não pode ser futura"
+                    obra.data_cadastro = data_obj
+                except ValueError:
+                    return False, "Data de cadastro inválida. Use o formato DD/MM/AAAA"
+            
             obra.titulo = titulo
             obra.ano = int(ano)
-            # garante artista como lista
             if isinstance(artista, str):
                 obra.artista = [a.strip() for a in artista.split(",") if a.strip()]
             else:
@@ -98,6 +121,7 @@ class ObraController:
             return False, str(ve)
         except Exception as e:
             return False, f"Erro ao atualizar obra: {str(e)}"
+
 
     def get_tipos_obra(self):
             """retorna os tipos de obra disponíveis para o cadastro"""

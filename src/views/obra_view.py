@@ -69,8 +69,10 @@ class ObraView:
 
         # --- Linha 3: Data e Imagem --- #
         ttk.Label(frm_cadastro, text="Data cadastro:").grid(row=2, column=0, sticky="w", padx=(10,5), pady=5)
-        self.data_entry = ttk.Entry(frm_cadastro, state="readonly")
+        self.data_entry = ttk.Entry(frm_cadastro)
         self.data_entry.grid(row=2, column=1, sticky="ew", padx=(5,10), pady=5)
+        self.data_entry.insert(0, date.today().strftime("%d/%m/%Y"))
+        ttk.Label(frm_cadastro, text="(DD/MM/AAAA)", font=("Arial", 8), foreground="gray").grid(row=3, column=0, columnspan=2, sticky="w", padx=(10,5), pady=(0,5))
         self.atualizar_data()
 
         ttk.Label(frm_cadastro, text="Imagem:").grid(row=2, column=2, sticky="w", padx=(10,5), pady=5)
@@ -229,10 +231,8 @@ class ObraView:
     # ---------------------- DATA ---------------------- #
     def atualizar_data(self):
         data_atual = date.today().strftime("%d/%m/%Y")
-        self.data_entry.config(state="normal")
         self.data_entry.delete(0, tk.END)
         self.data_entry.insert(0, data_atual)
-        self.data_entry.config(state="readonly")
 
     # ---------------------- ARTISTAS ---------------------- #
     def obter_artistas(self):
@@ -243,13 +243,14 @@ class ObraView:
         try:
             titulo = self.titulo_entry.get().strip()
             ano = self.ano_entry.get().strip()
-            artistas = self.obter_artistas()  # já é lista
+            artistas = self.obter_artistas()
             tipo = self.tipo_combo.get()
             tecnica = self.tecnica_entry.get().strip()
             dimensoes = self.dimensoes_entry.get().strip()
             localizacao = self.localizacao_entry.get().strip()
             preco = self.preco_entry.get().strip()
             status = StatusObra.DISPONIVEL
+            data_cadastro_str = self.data_entry.get().strip()  # Capturar data digitada
 
             if not artistas:
                 messagebox.showerror("Erro", "Adicione pelo menos um artista")
@@ -259,12 +260,14 @@ class ObraView:
                 status = self.obra_em_edicao.status
                 sucesso, mensagem = self.controller.atualizar_obra(
                     self.obra_em_edicao.id_obra, titulo, ano, artistas, tipo, 
-                    tecnica, dimensoes, localizacao, preco, status, self.imagem_path
+                    tecnica, dimensoes, localizacao, preco, status, self.imagem_path,
+                    data_cadastro_str  # Passar data para o controller
                 )
             else:
                 sucesso, mensagem = self.controller.cadastrar_obra(
                     titulo, ano, artistas, tipo, tecnica, dimensoes, 
-                    localizacao, preco, status, self.imagem_path
+                    localizacao, preco, status, self.imagem_path,
+                    data_cadastro_str  # Passar data para o controller
                 )
 
             if sucesso:
@@ -378,11 +381,9 @@ class ObraView:
             self.data_entry.insert(0, obra.data_cadastro.strftime("%d/%m/%Y"))
             self.data_entry.config(state="readonly")
 
-        if obra.artista:
-            self.artistas_selecionados = list(obra.artista) if isinstance(obra.artista, (list, tuple)) else [str(obra.artista)]
-            texto = "Artistas Selecionados: " + ", ".join(self.artistas_selecionados) \
-                    if self.artistas_selecionados else "Nenhum artista selecionado"
-            self.label_artistas_selecionados.config(text=texto)
+        if obra.data_cadastro:
+            self.data_entry.delete(0, tk.END)
+            self.data_entry.insert(0, obra.data_cadastro.strftime("%d/%m/%Y"))
 
         if obra.imagem:
             self.imagem_path = obra.imagem
