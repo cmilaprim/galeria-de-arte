@@ -99,6 +99,12 @@ class RelatorioController:
             if "ano" in filtros_brutos and filtros_brutos["ano"]:
                 filtros_validados["ano"] = self.validar_ano(filtros_brutos["ano"])
                 
+            if "valor" in filtros_brutos and filtros_brutos["valor"]:
+                filtros_validados["valor"] = self.validar_valor(filtros_brutos["valor"])
+                
+            if "data_cadastro" in filtros_brutos and filtros_brutos["data_cadastro"]:
+                filtros_validados["data_cadastro"] = self.validar_data_cadastro(filtros_brutos["data_cadastro"])
+                
             if "tecnica" in filtros_brutos and filtros_brutos["tecnica"]:
                 filtros_validados["tecnica"] = filtros_brutos["tecnica"]
                 
@@ -111,11 +117,6 @@ class RelatorioController:
             if "localizacao" in filtros_brutos and filtros_brutos["localizacao"]:
                 filtros_validados["localizacao"] = filtros_brutos["localizacao"]
                 
-            if "valor" in filtros_brutos and filtros_brutos["valor"]:
-                filtros_validados["valor"] = self.validar_valor(filtros_brutos["valor"])
-                
-            if "data_cadastro" in filtros_brutos and filtros_brutos["data_cadastro"]:
-                filtros_validados["data_cadastro"] = self.validar_data_cadastro(filtros_brutos["data_cadastro"])
                 
             if "artistas" in filtros_brutos and filtros_brutos["artistas"]:
                 filtros_validados["artistas"] = filtros_brutos["artistas"]
