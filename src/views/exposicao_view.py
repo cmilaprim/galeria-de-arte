@@ -443,7 +443,7 @@ class ExposicaoView:
                 if id_obra in initial_participacao_ids:
                     messagebox.showinfo("Info", f"Obra ID {id_obra} já está vinculada à exposição."); continue
                 if not self._obra_efetivamente_disponivel(id_obra, data_inicio, data_fim, exclude_expo_id=id_exposicao):
-                    messagebox.showwarning("Atenção", f"Obra ID {id_obra} não pode ser marcada para adicionar (não disponível)."); continue
+                    messagebox.showwarning("Atenção", f"Obra ID {id_obra} não está disponível para adicionar."); continue
                 else: to_add.add(id_obra)
                 changed = True
             if changed: carregar()
@@ -459,7 +459,7 @@ class ExposicaoView:
                 if id_obra in to_add:
                     to_add.remove(id_obra); changed = True; continue
                 if id_obra not in initial_participacao_ids:
-                    messagebox.showinfo("Info", f"Obra ID {id_obra} não está vinculada atualmente; marque-a para adicionar em vez disso."); continue
+                    messagebox.showinfo("Info", f"Obra ID {id_obra} não está vinculada."); continue
                 else: to_remove.add(id_obra)
                 changed = True
             if changed: carregar()
@@ -484,10 +484,10 @@ class ExposicaoView:
             for id_obra in list(to_add):
                 id_obra = int(id_obra)
                 if not self._obra_efetivamente_disponivel(id_obra, data_inicio, data_fim, exclude_expo_id=id_exposicao):
-                    messagebox.showwarning("Atenção", f"Obra ID {id_obra} não está disponível. Não será adicionada."); continue
+                    messagebox.showwarning("Atenção", f"Obra ID {id_obra} não está disponível."); continue
                 ocupado = self._obra_ocupada_em_periodo(id_obra, data_inicio, data_fim, exclude_expo_id=id_exposicao)
                 if ocupado:
-                    messagebox.showwarning("Atenção", f"Obra ID {id_obra} está ocupada em período conflituoso."); continue
+                    messagebox.showwarning("Atenção", f"Obra ID {id_obra} está ocupada no período."); continue
                 res = self.controller.adicionar_obra(id_exposicao, id_obra)
                 ok = bool(res[0]) if isinstance(res, tuple) else bool(res)
                 msg = res[1] if isinstance(res, tuple) and len(res) > 1 else None
