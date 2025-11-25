@@ -8,15 +8,20 @@ class ExposicaoController:
         # instancia o manager de banco de dados (encapsula acesso ao DB)
         self.db = DatabaseManager()
 
-    def _valida_data(self, s: str, campo: str):
-        # valida formato de data esperado (DD/MM/YYYY). Se vazio, considera aceitável.
-        if not s:
-            return
+    def _valida_data(self, data_inicio: str, data_fim: str, data_cadastro: str):
+        if not (data_inicio and data_fim and data_cadastro):
+            raise ValueError("Todas as datas devem estar no formato DD/MM/YYYY")
         try:
-            datetime.strptime(s, "%d/%m/%Y")
+            d_inicio = datetime.strptime(data_inicio, "%d/%m/%Y").date()
+            d_fim = datetime.strptime(data_fim, "%d/%m/%Y").date()
+            d_cad = datetime.strptime(data_cadastro, "%d/%m/%Y").date()
         except Exception:
-            # lança ValueError para ser tratado pelo chamador
-            raise ValueError(f"{campo} deve estar no formato DD/MM/YYYY")
+            raise ValueError("Todas as datas devem estar no formato DD/MM/YYYY")
+        
+        if d_fim < d_inicio:
+            raise ValueError("Data Fim deve ser igual ou posterior à Data Início")
+        
+        return
 
     def salvar(self, id_exposicao, nome, tema, localizacao, status_texto, data_inicio, data_fim, data_cadastro, descricao) -> Tuple[bool, str]:
         # função principal para criar ou atualizar uma exposição.
@@ -24,11 +29,7 @@ class ExposicaoController:
             if not nome:
                 return False, "Nome é obrigatório."
 
-            # valida campos de data (lança ValueError em formato inválido)
-            self._valida_data(data_inicio, "Data Início")
-            self._valida_data(data_fim, "Data Fim")
-            self._valida_data(data_cadastro, "Data Cadastro")
-
+            self._valida_data(data_inicio, data_fim, data_cadastro)
             status_enum = next((s for s in StatusExposicao if s.value == status_texto), StatusExposicao.PLANEJADA)
 
             # cria o objeto de domínio Exposicao
