@@ -14,27 +14,37 @@ except ImportError:
 
 from src.controllers.transacao_controller import TransacaoController
 
+
 class TransacaoView:
     def __init__(self, root, controller=None, manager=None):
         self.root = root
 
+        # limpa a janela
         for w in self.root.winfo_children():
             w.destroy()
 
+        # controller segue padrão (controller instancia seu DatabaseManager)
         self.controller = controller or TransacaoController()
-        self.manager = manager
+        self.manager = manager  # mantido para compatibilidade, mas não usado diretamente
 
         self.root.title("Sistema de Gestão de Galeria de Arte")
         self.root.geometry("800x600")
         self.root.minsize(800, 600)
         self.root.configure(bg="#eeeeee")
 
+        # estado da view
         self.transacao_selecionada = None
+        # armazenamos sempre ids (strings) das obras selecionadas
         self.obras_selecionadas = []
 
-        # tentativa de setar locale pt_BR (se disponível)
+        # mapeamento id->titulo para exibição (reconstruído quando necessário)
+        self._id_to_titulo = {}
+        # mapeia item_id (tree) -> lista bruta de obras (ids ou títulos) para edição / devolução
+        self._item_to_obras = {}
+
+        # tenta pt_BR
         try:
-            locale.setlocale(locale.LC_ALL, 'pt_BR.UTF-8')
+            locale.setlocale(locale.LC_ALL, "pt_BR.UTF-8")
         except Exception:
             pass
 
@@ -46,8 +56,10 @@ class TransacaoView:
         bg = "#F3F4F6"
         self.root.configure(bg=bg)
         style = ttk.Style()
-        try: style.theme_use("clam")
-        except Exception: pass
+        try:
+            style.theme_use("clam")
+        except Exception:
+            pass
         style.configure("TFrame", background=bg)
         style.configure("TLabelframe", background=bg)
         style.configure("TLabelframe.Label", background=bg)
@@ -57,96 +69,58 @@ class TransacaoView:
         frm_cadastro = ttk.LabelFrame(self.root, text="Cadastro de Transação", padding=10)
         frm_cadastro.pack(fill="x", padx=10, pady=8)
 
-        # Configuração das colunas para redimensionamento proporcional
+        # colunas proporcionais
         for i in range(6):
             frm_cadastro.columnconfigure(i, weight=1, uniform="col")
 
-        # --- Linha 1: Cliente, Valor, Tipo ---
-        campos_linha1 = [
-            ("Cliente:", "entry_cliente", "entry"),
-            ("Valor:", "entry_valor", "entry"),
-            ("Tipo:", "combo_tipo", "combo")
-        ]
+        # linha 0: Cliente, Valor, Tipo
+        ttk.Label(frm_cadastro, text="Cliente:").grid(row=0, column=0, sticky="w", padx=(10, 5), pady=5)
+        self.entry_cliente = ttk.Entry(frm_cadastro)
+        self.entry_cliente.grid(row=0, column=1, sticky="ew", padx=(5, 10), pady=5)
 
-        for idx, (label_text, attr_name, tipo) in enumerate(campos_linha1):
-            col_label = idx * 2
-            col_entry = idx * 2 + 1
+        ttk.Label(frm_cadastro, text="Valor:").grid(row=0, column=2, sticky="w", padx=(10, 5), pady=5)
+        self.entry_valor = ttk.Entry(frm_cadastro)
+        self.entry_valor.grid(row=0, column=3, sticky="ew", padx=(5, 10), pady=5)
+        self.entry_valor.bind("<KeyRelease>", self.formatar_valor)
 
-            ttk.Label(frm_cadastro, text=label_text).grid(
-                row=0, column=col_label, sticky="w", padx=(10,5), pady=5
-            )
+        ttk.Label(frm_cadastro, text="Tipo:").grid(row=0, column=4, sticky="w", padx=(10, 5), pady=5)
+        self.combo_tipo = ttk.Combobox(frm_cadastro, values=["Venda", "Aluguel", "Empréstimo", "Aquisição"], state="readonly")
+        self.combo_tipo.grid(row=0, column=5, sticky="ew", padx=(5, 10), pady=5)
 
-            if tipo == "combo":
-                combo = ttk.Combobox(frm_cadastro, values=["Venda","Aluguel","Empréstimo","Aquisição"], state="readonly")
-                combo.grid(row=0, column=col_entry, sticky="ew", padx=(5,10), pady=5)
-                setattr(self, attr_name, combo)
-            else:
-                entry = ttk.Entry(frm_cadastro)
-                entry.grid(row=0, column=col_entry, sticky="ew", padx=(5,10), pady=5)
-                setattr(self, attr_name, entry)
-                if attr_name == "entry_valor":
-                    entry.bind("<KeyRelease>", self.formatar_valor)
+        # linha 1: datas + obras
+        ttk.Label(frm_cadastro, text="Data Transação:").grid(row=1, column=0, sticky="w", padx=(10, 5), pady=5)
+        self.entry_data_transacao = DateEntry(frm_cadastro, date_pattern="dd/MM/yyyy", background="lightblue")
+        self.entry_data_transacao.grid(row=1, column=1, sticky="ew", padx=(5, 10), pady=5)
 
+        ttk.Label(frm_cadastro, text="Data Cadastro:").grid(row=1, column=2, sticky="w", padx=(10, 5), pady=5)
+        self.entry_data_cadastro = ttk.Entry(frm_cadastro, state="readonly")
+        self.entry_data_cadastro.grid(row=1, column=3, sticky="ew", padx=(5, 10), pady=5)
+        self.entry_data_cadastro.config(state="normal")
+        self.entry_data_cadastro.delete(0, tk.END)
+        self.entry_data_cadastro.insert(0, datetime.now().strftime("%d/%m/%Y"))
+        self.entry_data_cadastro.config(state="readonly")
 
-        # --- Linha 2: Datas + Obras ---
-        campos_linha2 = [
-            ("Data Transação:", "entry_data_transacao", "date"),
-            ("Data Cadastro:", "entry_data_cadastro", "readonly"),
-            ("Obra(s):", "botao_obras", "button")
-        ]
+        ttk.Label(frm_cadastro, text="Obra(s):").grid(row=1, column=4, sticky="w", padx=(10, 5), pady=5)
+        self.botao_obras = ttk.Button(frm_cadastro, text="Selecionar Obras", command=self.abrir_selecionar_obras)
+        self.botao_obras.grid(row=1, column=5, sticky="ew", padx=(5, 10), pady=5)
 
-        for idx, (label_text, attr_name, tipo) in enumerate(campos_linha2):
-            col_label = idx * 2
-            col_entry = idx * 2 + 1
-
-            ttk.Label(frm_cadastro, text=label_text).grid(
-                row=1, column=col_label, sticky="w", padx=(10,5), pady=5
-            )
-
-            if tipo == "date":
-                entry = DateEntry(frm_cadastro, date_pattern="dd/MM/yyyy", background="lightblue")
-                entry.grid(row=1, column=col_entry, sticky="ew", padx=(5,10), pady=5)
-                setattr(self, attr_name, entry)
-
-            elif tipo == "readonly":
-                entry = ttk.Entry(frm_cadastro, state="readonly")
-                entry.grid(row=1, column=col_entry, sticky="ew", padx=(5,10), pady=5)
-                entry.config(state="normal")
-                entry.delete(0, tk.END)
-                entry.insert(0, datetime.now().strftime("%d/%m/%Y"))
-                entry.config(state="readonly")
-                setattr(self, attr_name, entry)
-
-            else:  # botão Obras
-                btn = ttk.Button(frm_cadastro, text="Selecionar Obras", command=self.abrir_selecionar_obras)
-                btn.grid(row=1, column=col_entry, sticky="ew", padx=(5,10), pady=5)
-                setattr(self, attr_name, btn)
-
-
-        # --- Linha 3: Label de Obras Selecionadas ---
+        # linha 2: label de obras selecionadas
         self.label_obras_selecionadas = ttk.Label(
             frm_cadastro,
             text="Nenhuma obra selecionada",
-            wraplength=400,
+            wraplength=600,
             justify="left",
             foreground="gray"
         )
-        self.label_obras_selecionadas.grid(
-            row=2, column=0, columnspan=6, sticky="ew", padx=10, pady=(0,5)
-        )
+        self.label_obras_selecionadas.grid(row=2, column=0, columnspan=6, sticky="ew", padx=10, pady=(0, 5))
 
-        # --- Linha 4: Observações ---
-        ttk.Label(frm_cadastro, text="Observações:").grid(
-            row=3, column=0, sticky="nw", padx=(10,5), pady=5
-        )
-
+        # linha 3: observações
+        ttk.Label(frm_cadastro, text="Observações:").grid(row=3, column=0, sticky="nw", padx=(10, 5), pady=5)
         self.text_obs = tk.Text(frm_cadastro, height=5, relief="solid", borderwidth=1, bg="white")
-        self.text_obs.grid(
-            row=3, column=1, columnspan=5, sticky="nsew", padx=5, pady=5
-        )
+        self.text_obs.grid(row=3, column=1, columnspan=5, sticky="nsew", padx=5, pady=5)
 
-        # --- Botão Home (Voltar) --- #
-        frame_home = tk.Frame(frm_cadastro, bg="#f0f0f0", width=0, height=0)
+        # botão home (voltar) — preservado e visível
+        frame_home = tk.Frame(frm_cadastro, bg="#f0f0f0")
         frame_home.place(relx=1, rely=0, x=15, y=-35, anchor="ne")
         self.btn_home = tk.Button(
             frame_home,
@@ -163,12 +137,11 @@ class TransacaoView:
         )
         self.btn_home.pack(expand=True, fill="both")
 
-        # --- Botões Salvar / Cancelar / Buscar --- #
+        # botões salvar / cancelar
         btns_frame = ttk.Frame(frm_cadastro)
         btns_frame.grid(row=0, column=8, rowspan=4, sticky="n", padx=10, pady=5)
         ttk.Button(btns_frame, text="Salvar", command=self.salvar_transacao, width=16).pack(pady=4)
         ttk.Button(btns_frame, text="Cancelar", command=self.limpar_campos, width=16).pack(pady=4)
-        #ttk.Button(btns_frame, text="Buscar", command=self.carregar_transacoes, width=16).pack(pady=4)
 
         # --- FRAME DE LISTAGEM --- #
         listagem_frame = ttk.LabelFrame(self.root, text="Listagem de Transações", padding=10)
@@ -176,19 +149,19 @@ class TransacaoView:
         listagem_frame.columnconfigure(0, weight=1)
         listagem_frame.rowconfigure(0, weight=1)
 
-        # --- Botão Registrar Devolução --- #
+        # botão registrar devolução
         btn_devolucao = ttk.Button(listagem_frame, text="Registrar Devolução", command=self.abrir_devolucao, width=18)
         btn_devolucao.place(relx=1.0, x=-20, y=-6, anchor="ne")
 
-        # --- Treeview --- #
-        colunas = ("ID","Cliente","Valor","Tipo","Data Transação","Data Cadastro","Observações","Obra(s)")
+        # treeview de transações
+        colunas = ("ID", "Cliente", "Valor", "Tipo", "Data Transação", "Data Cadastro", "Observações", "Obra(s)")
         self.tree = ttk.Treeview(listagem_frame, columns=colunas, show="headings")
-        for c, w in zip(colunas, (60,200,100,100,90,90,150,150)):
+        for c, w in zip(colunas, (60, 200, 100, 100, 90, 90, 150, 150)):
             self.tree.heading(c, text=c)
             self.tree.column(c, width=w, anchor="w")
         self.tree.grid(row=0, column=0, sticky="nsew", padx=0, pady=(30, 0))
 
-        # Scrollbars
+        # scrollbars
         yscroll = ttk.Scrollbar(listagem_frame, orient="vertical", command=self.tree.yview)
         xscroll = ttk.Scrollbar(listagem_frame, orient="horizontal", command=self.tree.xview)
         self.tree.configure(yscrollcommand=yscroll.set, xscrollcommand=xscroll.set)
@@ -198,12 +171,13 @@ class TransacaoView:
         listagem_frame.grid_rowconfigure(0, weight=1)
         listagem_frame.grid_columnconfigure(0, weight=1)
 
+        # bind duplo clique
         self.tree.bind("<Double-1>", self.carregar_transacao_selecionada)
 
     # ---------------- MÉTODOS ----------------
     def formatar_valor(self, event=None):
         texto = self.entry_valor.get()
-        numeros = ''.join(filter(str.isdigit, texto))
+        numeros = "".join(filter(str.isdigit, texto))
         if numeros == "":
             self.entry_valor.delete(0, tk.END)
             return
@@ -211,8 +185,7 @@ class TransacaoView:
         try:
             texto_formatado = locale.currency(valor, grouping=True)
         except Exception:
-            # fallback para formatação manual (pt_BR style)
-            texto_formatado = f"{valor:,.2f}".replace('.', 'X').replace(',', '.').replace('X', ',')
+            texto_formatado = f"{valor:,.2f}".replace(".", "X").replace(",", ".").replace("X", ",")
         self.entry_valor.delete(0, tk.END)
         self.entry_valor.insert(0, texto_formatado)
 
@@ -225,9 +198,9 @@ class TransacaoView:
 
     # ---------- Salvar / Limpar ----------
     def salvar_transacao(self):
-        cliente = self.entry_cliente.get()
+        cliente = self.entry_cliente.get().strip()
         valor_texto = self.entry_valor.get().replace("R$", "").replace(".", "").replace(",", ".").strip()
-        tipo = self.combo_tipo.get()
+        tipo = self.combo_tipo.get().strip()
         data_transacao = self.entry_data_transacao.get_date().strftime("%d/%m/%Y")
         observacoes = self.text_obs.get("1.0", tk.END).strip()
 
@@ -240,8 +213,10 @@ class TransacaoView:
             messagebox.showerror("Erro", "O campo Valor deve ser numérico.")
             return
 
+        # enviamos lista de ids (strings)
+        obras_para_salvar = [str(x).strip() for x in self.obras_selecionadas]
+
         if self.transacao_selecionada:
-            # Atualização
             success, msg = self.controller.atualizar_transacao(
                 transacao_id=self.transacao_selecionada,
                 cliente=cliente,
@@ -249,17 +224,16 @@ class TransacaoView:
                 tipo=tipo,
                 data_transacao=data_transacao,
                 observacoes=observacoes,
-                obras=self.obras_selecionadas
+                obras=obras_para_salvar
             )
         else:
-            # Cadastro novo
             success, msg = self.controller.cadastrar_transacao(
                 cliente=cliente,
                 valor=valor,
                 tipo=tipo,
                 data_transacao=data_transacao,
                 observacoes=observacoes,
-                obras=self.obras_selecionadas
+                obras=obras_para_salvar
             )
 
         if success:
@@ -270,38 +244,73 @@ class TransacaoView:
             messagebox.showerror("Erro", msg)
 
     def limpar_campos(self):
-        self.entry_cliente.delete(0, tk.END)
-        self.entry_valor.delete(0, tk.END)
-        self.combo_tipo.set("")
-        self.text_obs.delete("1.0", tk.END)
-        self.entry_data_transacao.set_date(date.today())
-        self.entry_data_cadastro.config(state="normal")
-        self.entry_data_cadastro.delete(0, tk.END)
-        self.entry_data_cadastro.insert(0, datetime.now().strftime("%d/%m/%Y"))
-        self.entry_data_cadastro.config(state="readonly")
+        try:
+            self.entry_cliente.delete(0, tk.END)
+            self.entry_valor.delete(0, tk.END)
+            self.combo_tipo.set("")
+            self.text_obs.delete("1.0", tk.END)
+            self.entry_data_transacao.set_date(date.today())
+            self.entry_data_cadastro.config(state="normal")
+            self.entry_data_cadastro.delete(0, tk.END)
+            self.entry_data_cadastro.insert(0, datetime.now().strftime("%d/%m/%Y"))
+            self.entry_data_cadastro.config(state="readonly")
+        except Exception:
+            pass
         self.transacao_selecionada = None
         self.obras_selecionadas = []
         self.label_obras_selecionadas.config(text="Nenhuma obra selecionada")
+        self._item_to_obras.clear()
 
     # ---------- Carregar ----------
     def carregar_transacoes(self):
+        # limpa árvore
         for row in self.tree.get_children():
             self.tree.delete(row)
+        self._item_to_obras.clear()
+
+        # reconstrói map id->titulo para exibição
+        self._rebuild_obra_cache()
+
+        # preenche tree de transações
         for transacao in self.controller.listar_transacoes():
-            valores = [transacao.id, transacao.cliente, transacao.valor, transacao.tipo,
-                       transacao.data_transacao, transacao.data_cadastro, transacao.observacoes,
-                       ", ".join(transacao.obras)]
+            obras_raw = transacao.obras or []
+            display_titles = []
+            parsed = []
+            for o in obras_raw:
+                s = str(o).strip()
+                # se for id numérico, mapeia para título; caso contrário, assume título
+                if s.isdigit():
+                    parsed.append(s)
+                    display_titles.append(self._id_to_titulo.get(s, s))
+                else:
+                    # se for título, tenta encontrar id correspondente; senão usa o texto
+                    found = next((k for k, v in self._id_to_titulo.items() if v == s), None)
+                    parsed.append(found or s)
+                    display_titles.append(self._id_to_titulo.get(found, s) if found else s)
+            obras_txt = ", ".join(display_titles)
             try:
-                valores[2] = locale.currency(float(valores[2]), grouping=True)
+                valor_fmt = locale.currency(float(transacao.valor), grouping=True)
             except Exception:
-                valores[2] = f"{float(valores[2]):,.2f}".replace('.', 'X').replace(',', '.').replace('X', ',')
-            self.tree.insert("", tk.END, values=valores)
+                valor_fmt = f"{float(transacao.valor):,.2f}".replace(".", "X").replace(",", ".").replace("X", ",")
+            iid = self.tree.insert("", tk.END, values=(
+                transacao.id,
+                transacao.cliente,
+                valor_fmt,
+                transacao.tipo,
+                transacao.data_transacao,
+                transacao.data_cadastro,
+                transacao.observacoes,
+                obras_txt
+            ))
+            # armazena parsed list (ids ou titles) para uso posterior (edição/devolução)
+            self._item_to_obras[iid] = parsed
 
     def carregar_transacao_selecionada(self, event):
         itens = self.tree.selection()
         if not itens:
             return
-        valores = self.tree.item(itens[0], "values")
+        iid = itens[0]
+        valores = self.tree.item(iid, "values")
         self.transacao_selecionada = valores[0]
 
         self.entry_cliente.delete(0, tk.END)
@@ -314,155 +323,117 @@ class TransacaoView:
         except Exception:
             pass
         self.text_obs.delete("1.0", tk.END)
-        self.text_obs.insert("1.0", valores[6])
+        self.text_obs.insert("1.0", valores[6] or "")
         self.entry_data_cadastro.config(state="normal")
         self.entry_data_cadastro.delete(0, tk.END)
-        self.entry_data_cadastro.insert(0, valores[5])
+        self.entry_data_cadastro.insert(0, valores[5] or "")
         self.entry_data_cadastro.config(state="readonly")
-        self.obras_selecionadas = valores[7].split(', ') if valores[7] else []
+
+        raw = self._item_to_obras.get(iid, [])
+        # armazena ids (strings) quando possível; títulos ficam como fallback
+        self.obras_selecionadas = [str(x) for x in raw]
+        titles = [self._id_to_titulo.get(str(x), str(x)) for x in self.obras_selecionadas]
         self.label_obras_selecionadas.config(
-            text="Obras Selecionadas: " + ", ".join(self.obras_selecionadas) if self.obras_selecionadas else "Nenhuma obra selecionada"
+            text="Obras Selecionadas: " + ", ".join(titles) if titles else "Nenhuma obra selecionada"
         )
 
-    # ---------- Helpers para acessar DB com fallback flexível ----------
-    def _fetch_obras_from_db(self, sql="SELECT id_obra, titulo, nome_artista, status FROM obras"):
-        """
-        Tenta vários caminhos para obter as obras:
-        - self.manager.db.cursor()
-        - self.manager.cursor() / self.manager.conectar()
-        - importar database.manager (módulo) e usar db
-        Retorna lista (possivelmente vazia) de rows (cada row pode ser dict-like ou tuple).
-        """
-        try:
-            if self.manager:
-                dbobj = getattr(self.manager, "db", None)
-                if dbobj and hasattr(dbobj, "cursor"):
-                    with dbobj.cursor() as cursor:
-                        cursor.execute(sql)
-                        return cursor.fetchall()
-
-                if hasattr(self.manager, "conectar"):
-                    conn = self.manager.conectar()
-                    cursor = conn.cursor()
-                    cursor.execute(sql)
-                    rows = cursor.fetchall()
-                    conn.close()
-                    return rows
-
-                if hasattr(self.manager, "cursor"):
-                    with self.manager.cursor() as cursor:
-                        cursor.execute(sql)
-                        return cursor.fetchall()
-
-            # fallback para módulo database.manager
-            import database.manager as dbmod
-            dbobj = getattr(dbmod, "db", None)
-            if dbobj and hasattr(dbobj, "cursor"):
-                with dbobj.cursor() as cursor:
-                    cursor.execute(sql)
-                    return cursor.fetchall()
-        except Exception:
-            # retorna lista vazia para UI
-            return []
-        return []
-
-    def _execute_update(self, sql, params=()):
-        """
-        Executa um update com vários fallbacks (sem levantar exceções ao UI).
-        """
-        try:
-            if self.manager:
-                dbobj = getattr(self.manager, "db", None)
-                if dbobj and hasattr(dbobj, "cursor"):
-                    with dbobj.cursor() as cursor:
-                        cursor.execute(sql, params)
-                        # commit se disponível
-                        try:
-                            dbobj.commit()
-                        except Exception:
-                            pass
-                        return True
-
-                if hasattr(self.manager, "conectar"):
-                    conn = self.manager.conectar()
-                    cursor = conn.cursor()
-                    cursor.execute(sql, params)
-                    conn.commit()
-                    conn.close()
-                    return True
-
-                if hasattr(self.manager, "cursor"):
-                    with self.manager.cursor() as cursor:
-                        cursor.execute(sql, params)
-                        try:
-                            self.manager.commit()
-                        except Exception:
-                            pass
-                        return True
-
-            import database.manager as dbmod
-            dbobj = getattr(dbmod, "db", None)
-            if dbobj and hasattr(dbobj, "cursor"):
-                with dbobj.cursor() as cursor:
-                    cursor.execute(sql, params)
-                    try:
-                        dbobj.commit()
-                    except Exception:
-                        pass
-                return True
-        except Exception:
-            return False
-        return False
-
-    # ---------- Selecionar obras ----------
+    # ---------- Selecionar obras (modal maior, sem símbolos, só cores) ----------
     def abrir_selecionar_obras(self):
-        janela_obras = tk.Toplevel(self.root)
-        janela_obras.title("Seleção de Obras")
-        janela_obras.transient(self.root)
-        janela_obras.grab_set()
-        self.centralizar_janela(janela_obras, 600, 400)
+        win = tk.Toplevel(self.root)
+        win.title("Seleção de Obras")
+        win.transient(self.root)
+        win.grab_set()
+        # aumentado para não cortar informações (conforme exposicao_view)
+        self.centralizar_janela(win, 900, 520)
 
-        colunas = ("ID", "Nome", "Artista", "Status")
-        tree_obras = ttk.Treeview(janela_obras, columns=colunas, show="headings", selectmode="extended")
-        for col in colunas:
-            tree_obras.heading(col, text=col)
-            tree_obras.column(col, width=140, anchor="center")
-        tree_obras.pack(fill=tk.BOTH, expand=True, padx=10, pady=(10, 5))
+        frame = ttk.Frame(win, padding=10)
+        frame.pack(fill="both", expand=True)
 
-        obras = self._fetch_obras_from_db()
-        for obra in obras:
+        cols = ("ID", "Título", "Artista", "Status")
+        tree_obras = ttk.Treeview(frame, columns=cols, show="headings", selectmode="extended")
+        for c, w in [("ID", 60), ("Título", 460), ("Artista", 220), ("Status", 140)]:
+            tree_obras.heading(c, text=c)
+            tree_obras.column(c, width=w, anchor="w")
+        tree_obras.pack(fill="both", expand=True, padx=6, pady=(6, 4))
+
+        # tags visuais — cores alinhadas ao exposicao_view
+        # NOTE: mapeamento ajustado para que obras ocupadas *não* fiquem verdes.
+        tree_obras.tag_configure("available", background="#D6F5D6")     # verde claro = disponível
+        tree_obras.tag_configure("in_exposicao", background="#F8E8E8")  # cinza claro = em exposição (ocupada)
+        tree_obras.tag_configure("busy", background="#F5D6D6")          # rosado claro = indisponível/outros
+        tree_obras.tag_configure("to_add", background="#D6F5D6")
+        tree_obras.tag_configure("to_remove", background="#F5D6D6")
+
+        # busca obras via controller.db_manager (uso direto do manager do controller, como exposicao_view)
+        try:
+            obras = self.controller.db_manager.listar_todas_obras() or []
+        except Exception:
+            obras = []
+
+        # reconstrói map id->titulo (para a label de seleção)
+        self._rebuild_obra_cache()
+
+        for o in obras:
             try:
-                if isinstance(obra, dict) or hasattr(obra, "get"):
-                    id_obra = obra.get("id_obra") or obra.get("id")
-                    titulo = obra.get("titulo") or obra.get("nome") or ""
-                    artista = obra.get("nome_artista") or obra.get("artista") or ""
-                    status = obra.get("status") or ""
-                else:
-                    id_obra = obra[0] if len(obra) > 0 else ""
-                    titulo = obra[1] if len(obra) > 1 else ""
-                    artista = obra[2] if len(obra) > 2 else ""
-                    status = obra[3] if len(obra) > 3 else ""
+                oid = getattr(o, "id_obra", getattr(o, "id", ""))
+                titulo = getattr(o, "titulo", "") or ""
+                artista_raw = getattr(o, "artista", "")
+                artista = ", ".join(artista_raw) if isinstance(artista_raw, (list, tuple)) else str(artista_raw)
+                status_raw = getattr(o, "status", None)
+                status = status_raw.value if hasattr(status_raw, "value") else str(status_raw or "")
             except Exception:
-                id_obra = ""
-                titulo = str(obra)
+                oid = ""
+                titulo = str(o)
                 artista = ""
                 status = ""
 
-            tree_obras.insert("", tk.END, values=(id_obra, titulo, artista, status))
+            s_norm = (status or "").strip().lower()
+            # ajuste: disponível => green; em exposição (ocupada) => in_exposicao (gray); outros (vendida, alugada, etc) => busy (rose)
+            if "dispon" in s_norm:
+                tag = "available"
+            elif "em" in s_norm and ("expos" in s_norm or "exposição" in s_norm or "em_expos" in s_norm):
+                tag = "in_exposicao"
+            else:
+                tag = "busy"
 
-        frame_botoes = ttk.Frame(janela_obras)
+            # inserir SÓ o título (sem símbolos), tags controlam cor
+            iid = tree_obras.insert("", tk.END, values=(str(oid), titulo, artista, status), tags=(tag,))
+
+            # pre-seleciona se já estiver nas obras_selecionadas (ids)
+            if any(str(oid) == str(x) for x in self.obras_selecionadas):
+                tree_obras.selection_add(iid)
+
+        # botões confirmar / cancelar
+        frame_botoes = ttk.Frame(frame)
         frame_botoes.pack(pady=10)
 
         def confirmar_selecao():
             itens = tree_obras.selection()
-            selecionadas = [tree_obras.item(i, "values")[1] for i in itens]
-            self.obras_selecionadas = selecionadas
-            texto = "Obras Selecionadas: " + ", ".join(self.obras_selecionadas) if self.obras_selecionadas else "Nenhuma obra selecionada"
+            selecionadas_ids = []
+            titulos_para_label = []
+            ignoradas = []
+            for it in itens:
+                vals = tree_obras.item(it, "values")
+                id_obra = str(vals[0])
+                titulo = str(vals[1])  # já sem símbolos
+                tag = tree_obras.item(it, "tags")[0] if tree_obras.item(it, "tags") else ""
+                # valida disponibilidade no momento da seleção: só aceitar tag "available"
+                if tag == "available":
+                    selecionadas_ids.append(id_obra)
+                    titulos_para_label.append(titulo)
+                else:
+                    # marca como ignorada
+                    ignoradas.append(titulo)
+            # armazenar ids (strings)
+            self.obras_selecionadas = selecionadas_ids
+            texto = "Obras Selecionadas: " + ", ".join(titulos_para_label) if titulos_para_label else "Nenhuma obra selecionada"
             self.label_obras_selecionadas.config(text=texto)
-            janela_obras.destroy()
+            if ignoradas:
+                messagebox.showwarning("Atenção", f"As seguintes obras não foram adicionadas pois não estão disponíveis: {', '.join(ignoradas)}")
+            win.destroy()
 
         ttk.Button(frame_botoes, text="Confirmar Seleção", command=confirmar_selecao).pack(side="left", padx=10)
-        ttk.Button(frame_botoes, text="Cancelar", command=janela_obras.destroy).pack(side="left", padx=10)
+        ttk.Button(frame_botoes, text="Cancelar", command=win.destroy).pack(side="left", padx=10)
 
     def voltar_inicio(self):
         try:
@@ -470,19 +441,19 @@ class TransacaoView:
         except Exception:
             messagebox.showerror("Erro", "Não foi possível voltar à tela inicial (import).")
             return
-
         for w in self.root.winfo_children():
             w.destroy()
         TelaInicial(self.root, self.manager)
 
     # ---------- Registrar devolução ----------
     def abrir_devolucao(self):
-        item = self.tree.selection()
-        if not item:
+        sel = self.tree.selection()
+        if not sel:
             messagebox.showwarning("Atenção", "Selecione uma transação para registrar devolução.")
             return
-        valores = self.tree.item(item[0], "values")
-        id_transacao, cliente, valor, tipo, data_transacao, _, observacoes_orig, obras_orig = valores
+        iid = sel[0]
+        vals = self.tree.item(iid, "values")
+        id_transacao, cliente, valor, tipo, data_transacao, _, observacoes_orig, obras_display = vals
 
         if tipo not in ("Aluguel", "Empréstimo"):
             messagebox.showerror("Erro", "Só é possível registrar devolução de transações de Aluguel ou Empréstimo.")
@@ -508,31 +479,55 @@ class TransacaoView:
 
         def confirmar():
             data_dev = date_dev_entry.get_date()
-            data_trans = datetime.strptime(data_transacao, "%d/%m/%Y").date()
+            try:
+                data_trans = datetime.strptime(data_transacao, "%d/%m/%Y").date()
+            except Exception:
+                messagebox.showerror("Erro", "Data da transação inválida.")
+                return
             if data_dev <= data_trans:
                 messagebox.showerror("Erro", "A data de devolução deve ser posterior à data da transação original.")
                 return
 
             data_dev_str = data_dev.strftime("%d/%m/%Y")
-            obras_list = [o.strip() for o in obras_orig.split(",") if o.strip()]
+            # obtém lista bruta de obras do item (ids ou titles)
+            raw_obras = self._item_to_obras.get(iid, [])
+            # converte ids -> títulos quando possível (controller aceita ambos)
+            titulos_para_devolucao = []
+            for o in raw_obras:
+                s = str(o).strip()
+                if s.isdigit():
+                    titulos_para_devolucao.append(self._id_to_titulo.get(s, s))
+                else:
+                    titulos_para_devolucao.append(s)
 
-            # Atualiza status das obras no banco
-            for obra in obras_list:
-                updated = self._execute_update("UPDATE obras SET status='Disponível' WHERE titulo=?", (obra,))
-                if not updated:
-                    self._execute_update("UPDATE obras SET status='Disponível' WHERE titulo=%s", (obra,))
-
-            observacoes_dev = f"Devolução de {tipo}: ID {id_transacao}."
-            self.controller.registrar_devolucao(
+            # registra devolução via controller (controller atualiza status das obras)
+            success, msg = self.controller.registrar_devolucao(
                 transacao_id=id_transacao,
                 data_devolucao=data_dev_str,
-                observacoes=observacoes_dev,
-                obras=obras_list
+                observacoes=f"Devolução de {tipo}: ID {id_transacao}.",
+                obras=titulos_para_devolucao
             )
 
-            messagebox.showinfo("Sucesso", "Devolução registrada com sucesso!")
+            if success:
+                messagebox.showinfo("Sucesso", msg)
+            else:
+                messagebox.showerror("Erro", msg)
+
             win_dev.destroy()
             self.carregar_transacoes()
 
         ttk.Button(frame_btn, text="Cancelar", command=win_dev.destroy).pack(side="left", padx=10, expand=True, fill="x")
         ttk.Button(frame_btn, text="Confirmar", command=confirmar).pack(side="left", padx=10, expand=True, fill="x")
+
+    # ---------------- helpers ----------------
+    def _rebuild_obra_cache(self):
+        """Reconstrói cache id -> título usando controller.db_manager"""
+        self._id_to_titulo.clear()
+        try:
+            for o in self.controller.db_manager.listar_todas_obras() or []:
+                oid = getattr(o, "id_obra", getattr(o, "id", None))
+                titulo = getattr(o, "titulo", "") or ""
+                if oid is not None:
+                    self._id_to_titulo[str(oid)] = titulo
+        except Exception:
+            pass

@@ -267,6 +267,12 @@ class ExposicaoView:
                     for p in obras:
                         pid = getattr(p,"id_obra",None) or (p.get("id_obra") if isinstance(p,dict) else None)
                         if pid is None: continue
+                        try:
+                            cur_status = (self._get_status_da_obra(int(pid)) or "").strip()
+                            if cur_status in ("Alugada", "Vendida", "Empréstimo"):
+                                continue
+                        except Exception:
+                            pass
                         self._set_obra_status(int(pid), "Em Exposição")
                 if new_status in ("Finalizada","Planejada"):
                     obras = self.controller.listar_obras(self._id_atual) or []

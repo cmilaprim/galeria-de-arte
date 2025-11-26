@@ -9,6 +9,7 @@ from src.models.artista_model import Artista, StatusArtista
 from src.models.transacao_model import Transacao
 from src.models.exposicao_model import Exposicao, StatusExposicao
 
+
 class DatabaseManager:
     def __init__(self, db_file: Optional[str] = None):
         if db_file is None:
@@ -19,6 +20,222 @@ class DatabaseManager:
 
         os.makedirs(os.path.dirname(self.db_file), exist_ok=True)
         self._criar_tabelas()
+
+        try:
+            hoje = date.today()
+
+            def _parse_data_mista(s):
+                if not s or str(s).strip() == "":
+                    return None
+                try:
+                    return datetime.fromisoformat(str(s)).date()
+                except Exception:
+                    pass
+                try:
+                    return datetime.strptime(str(s), "%d/%m/%Y").date()
+                except Exception:
+                    return None
+
+            expos = self.listar_exposicoes() or []
+            for expo in expos:
+                try:
+                    di_raw = getattr(expo, "data_inicio", None) or (expo.get("data_inicio") if isinstance(expo, dict) else None)
+                    df_raw = getattr(expo, "data_fim", None) or (expo.get("data_fim") if isinstance(expo, dict) else None)
+
+                    di = _parse_data_mista(di_raw)
+                    df = _parse_data_mista(df_raw)
+
+                    status_auto = ""
+                    if di and df:
+                        if hoje < di:
+                            status_auto = "Planejada"
+                        elif di <= hoje <= df:
+                            status_auto = "Em Curso"
+                        else:
+                            status_auto = "Finalizada"
+                    elif di and not df:
+                        status_auto = "Planejada" if hoje < di else "Em Curso"
+                    elif not di and df:
+                        status_auto = "Em Curso" if hoje <= df else "Finalizada"
+                    else:
+                        status_auto = ""
+
+                    try:
+                        stored_status = expo.status.value if hasattr(expo, "status") and hasattr(expo.status, "value") else (expo.get("status") if isinstance(expo, dict) else (getattr(expo, "status", "") or ""))
+                    except Exception:
+                        stored_status = (expo.get("status") if isinstance(expo, dict) else (getattr(expo, "status", "") or ""))
+
+                    # se houve mudança, atualiza a exposição persistida
+                    if status_auto and status_auto != (stored_status or ""):
+                        try:
+                            try:
+                                expo.status = next((s for s in StatusExposicao if s.value == status_auto), expo.status)
+                            except Exception:
+                                pass
+                            self.atualizar_exposicao(expo)
+                            stored_status = status_auto
+                        except Exception:
+                            pass
+
+                    parts = self.listar_participacoes_por_exposicao(getattr(expo, "id_exposicao", (expo.get("id_exposicao") if isinstance(expo, dict) else None))) or []
+
+                    def _extrair_campo_participacao(p, nome_campo):
+                        try:
+                            v = getattr(p, nome_campo)
+                            if v is not None:
+                                return v
+                        except Exception:
+                            pass
+                        try:
+                            if isinstance(p, dict):
+                                return p.get(nome_campo)
+                        except Exception:
+                            pass
+                        try:
+                            return p[nome_campo]
+                        except Exception:
+                            pass
+                        try:
+                            if hasattr(p, "get"):
+                                return p.get(nome_campo)
+                        except Exception:
+                            pass
+                        try:
+                            if nome_campo == "id_obra":
+                                return p[1]
+                        except Exception:
+                            pass
+                        try:
+                            if nome_campo == "titulo":
+                                return p[3]
+                        except Exception:
+                            pass
+                        try:
+                            for x in p:
+                                if isinstance(x, int):
+                                    return x
+                        except Exception:
+                            pass
+                        return None
+
+                    for part in parts:
+                        try:
+                            id_obra = _extrair_campo_participacao(part, "id_obra")
+                            titulo = _extrair_campo_participacao(part, "titulo")
+                            try:
+                                id_obra = int(id_obra) if id_obra is not None else None
+                            except Exception:
+                                id_obra = None
+
+                            if (stored_status == "Em Curso") or (status_auto == "Em Curso"):
+                                if titulo:
+                                    try:
+                                        self.atualizar_status_obra_por_titulo(titulo, "Em Exposição")
+                                    except Exception:
+                                        pass
+                                else:
+                                    if id_obra is not None:
+                                        try:
+                                            row = self.buscar_obra_por_id(id_obra)
+                                            titulo_row = getattr(row, "titulo", None) if row else None
+                                            if titulo_row:
+                                                self.atualizar_status_obra_por_titulo(titulo_row, "Em Exposição")
+                                        except Exception:
+                                            pass
+
+                            if (stored_status in ("Finalizada", "Planejada")) or (status_auto in ("Finalizada", "Planejada")):
+                                if id_obra is None:
+                                    try:
+                                        id_obra = int(part["id_obra"])
+                                    except Exception:
+                                        pass
+                                if id_obra is None:
+                                    if titulo:
+                                        try:
+                                            cur_ok = False
+                                            with self.conectar() as con:
+                                                c = con.cursor()
+                                                c.execute("""
+                                                    SELECT 1 FROM participacao_exposicao pe
+                                                    JOIN exposicoes ex ON pe.id_exposicao = ex.id_exposicao
+                                                    WHERE pe.id_obra = ? AND ex.status IN ('Planejada','Em Curso') AND ex.id_exposicao != ?
+                                                    LIMIT 1
+                                                """, (id_obra, getattr(expo, "id_exposicao", (expo.get("id_exposicao") if isinstance(expo, dict) else None))))
+                                                r = c.fetchone()
+                                                cur_ok = (r is not None)
+
+                                            if not cur_ok:
+                                                try:
+                                                    # obtém status atual pela título (prioriza consulta direta)
+                                                    status_atual = None
+                                                    with self.conectar() as con2:
+                                                        cur2 = con2.cursor()
+                                                        cur2.execute("SELECT status FROM obras WHERE titulo = ? LIMIT 1", (titulo,))
+                                                        rs = cur2.fetchone()
+                                                        if rs:
+                                                            try:
+                                                                status_atual = rs["status"]
+                                                            except Exception:
+                                                                status_atual = rs[0] if len(rs) > 0 else None
+                                                    # não sobrescrever se obra estiver Alugada/Vendida/Empréstimo
+                                                    if status_atual not in ("Alugada", "Vendida", "Empréstimo"):
+                                                        try:
+                                                            self.atualizar_status_obra_por_titulo(titulo, "Disponível")
+                                                        except Exception:
+                                                            pass
+                                                except Exception:
+                                                    pass
+                                        except Exception:
+                                            pass
+                                else:
+                                    try:
+                                        with self.conectar() as con:
+                                            c = con.cursor()
+                                            c.execute("""
+                                                SELECT 1 FROM participacao_exposicao pe
+                                                JOIN exposicoes ex ON pe.id_exposicao = ex.id_exposicao
+                                                WHERE pe.id_obra = ? AND ex.status IN ('Planejada','Em Curso') AND ex.id_exposicao != ?
+                                                LIMIT 1
+                                            """, (id_obra, getattr(expo, "id_exposicao", (expo.get("id_exposicao") if isinstance(expo, dict) else None))))
+                                            existe_ativa = c.fetchone() is not None
+
+                                        if not existe_ativa:
+                                            try:
+                                                # obtém status atual priorizando id_obra
+                                                status_atual = None
+                                                with self.conectar() as con2:
+                                                    cur2 = con2.cursor()
+                                                    cur2.execute("SELECT status, titulo FROM obras WHERE id_obra = ? LIMIT 1", (int(id_obra),))
+                                                    rs = cur2.fetchone()
+                                                    if rs:
+                                                        try:
+                                                            status_atual = rs["status"]
+                                                            titulo_db = rs.get("titulo") if isinstance(rs, sqlite3.Row) else (rs[1] if len(rs) > 1 else None)
+                                                        except Exception:
+                                                            status_atual = rs[0] if len(rs) > 0 else None
+                                                            titulo_db = rs[1] if len(rs) > 1 else None
+                                                    else:
+                                                        titulo_db = None
+
+                                                # só atualiza para Disponível se o status atual permitir
+                                                if status_atual not in ("Alugada", "Vendida", "Empréstimo"):
+                                                    # preferir atualizar por título conhecido
+                                                    target_titulo = titulo or titulo_db
+                                                    if target_titulo:
+                                                        try:
+                                                            self.atualizar_status_obra_por_titulo(target_titulo, "Disponível")
+                                                        except Exception:
+                                                            pass
+                                            except Exception:
+                                                pass
+                                    except Exception:
+                                        pass
+                        except Exception:
+                            continue
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
     def conectar(self):
         """Cria conexão com row_factory para acesso por nome de coluna."""
@@ -177,7 +394,7 @@ class DatabaseManager:
         )
         with self.cursor() as cursor:
             cursor.execute(sql, valores)
-            
+
     def verificar_obra_existe(self, titulo: str, artista, ano: int) -> bool:
         artistas_norm = artista if isinstance(artista, (list, tuple)) else ([artista] if artista else [])
         artista_json = json.dumps(artistas_norm, ensure_ascii=False)
@@ -406,11 +623,9 @@ class DatabaseManager:
                 except Exception:
                     data_cadastro_dt = None
 
-        # Converte datas para string DD/MM/YYYY
         data_transacao_fmt = data_transacao_dt.strftime("%d/%m/%Y") if data_transacao_dt else None
         data_cadastro_fmt = data_cadastro_dt.strftime("%d/%m/%Y") if data_cadastro_dt else None
 
-        # Cria objeto Transacao
         trans = Transacao(
             cliente=cliente,
             valor=valor,
@@ -421,11 +636,10 @@ class DatabaseManager:
             obras=obras
         )
 
-        # Atribui o ID
         trans._Transacao__id = id_
 
         return trans
-    
+
     def get_status_obra_por_titulo(self, titulo: str) -> str:
         """Retorna o status atual da obra pelo título."""
         with self.conectar() as con:
@@ -445,14 +659,15 @@ class DatabaseManager:
             return None
 
         if isinstance(row, sqlite3.Row):
-            id_artista = row["id_artista"] if "id_artista" in row.keys() else row.get("id")
-            nome = row["nome"]
-            nascimento = row["nascimento"] if "nascimento" in row.keys() else row.get("nascimento")
-            nacionalidade = row["nacionalidade"] if "nacionalidade" in row.keys() else row.get("nacionalidade")
-            especialidade = row["especialidade"] if "especialidade" in row.keys() else row.get("especialidade")
-            status_str = row["status"] if "status" in row.keys() else row.get("status")
-            data_cadastro = row["data_cadastro"] if "data_cadastro" in row.keys() else row.get("datacadastro")
-            biografia = row["biografia"] if "biografia" in row.keys() else row.get("biografia")
+            keys = row.keys()
+            id_artista = row["id_artista"] if "id_artista" in keys else (row["id"] if "id" in keys else None)
+            nome = row["nome"] if "nome" in keys else None
+            nascimento = row["nascimento"] if "nascimento" in keys else None
+            nacionalidade = row["nacionalidade"] if "nacionalidade" in keys else None
+            especialidade = row["especialidade"] if "especialidade" in keys else None
+            status_str = row["status"] if "status" in keys else None
+            data_cadastro = row["data_cadastro"] if "data_cadastro" in keys else None
+            biografia = row["biografia"] if "biografia" in keys else None
         else:
             id_artista, nome, nascimento, nacionalidade, especialidade, status_str, data_cadastro, biografia = row
 
@@ -522,7 +737,8 @@ class DatabaseManager:
             rows = cursor.fetchall()
         return [self._row_to_artista(r) for r in rows]
 
-    def buscar_artistas(self, filtros: dict) -> list[Artista]:
+    def buscar_artistas(self, filtros: dict = None) -> list[Artista]:
+        filtros = filtros or {}
         where, params = [], []
 
         def like(campo, valor):
@@ -557,11 +773,12 @@ class DatabaseManager:
         sql = '''INSERT INTO exposicoes
                  (nome, tema, localizacao, status, data_inicio, data_fim, data_cadastro, descricao)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?)'''
+        status_val = exposicao.status.value if hasattr(exposicao, "status") and hasattr(exposicao.status, "value") else (exposicao.status if hasattr(exposicao, "status") else None)
         valores = (
             exposicao.nome,
             exposicao.tema,
             exposicao.localizacao,
-            exposicao.status.value,
+            status_val,
             exposicao.data_inicio,
             exposicao.data_fim,
             exposicao.data_cadastro,
@@ -580,11 +797,12 @@ class DatabaseManager:
         sql = '''UPDATE exposicoes SET
                  nome = ?, tema = ?, localizacao = ?, status = ?, data_inicio = ?, data_fim = ?, data_cadastro = ?, descricao = ?
                  WHERE id_exposicao = ?'''
+        status_val = exposicao.status.value if hasattr(exposicao, "status") and hasattr(exposicao.status, "value") else (exposicao.status if hasattr(exposicao, "status") else None)
         valores = (
             exposicao.nome,
             exposicao.tema,
             exposicao.localizacao,
-            exposicao.status.value,
+            status_val,
             exposicao.data_inicio,
             exposicao.data_fim,
             exposicao.data_cadastro,
@@ -635,7 +853,7 @@ class DatabaseManager:
                 )
         except Exception:
             return None
-    
+
     def buscar_exposicoes(self, filtros: dict = None):
         if not filtros:
             return self.listar_exposicoes()
@@ -693,12 +911,6 @@ class DatabaseManager:
     def inserir_participacao_exposicao(self, participacao: Any = None, id_exposicao: Optional[int] = None,
                                        id_obra: Optional[int] = None, data_inclusao: Optional[str] = None,
                                        observacao: Optional[str] = None):
-        """
-        Insere uma participação. Aceita:
-         - um objeto/dict com atributos/chaves id_exposicao, id_obra, data_inclusao, observacao
-         - ou passar id_exposicao, id_obra (e opcionalmente data_inclusao, observacao) separadamente.
-        Retorna (True, lastrowid) ou (False, error_msg).
-        """
         if participacao is not None and id_exposicao is None and id_obra is None:
             try:
                 if isinstance(participacao, dict):
@@ -707,7 +919,6 @@ class DatabaseManager:
                     data_inclusao = participacao.get("data_inclusao") or participacao.get("data")
                     observacao = participacao.get("observacao") or participacao.get("obs")
                 else:
-                    # objeto com atributos
                     id_exposicao = getattr(participacao, "id_exposicao", None) or getattr(participacao, "id_expo", None) or getattr(participacao, "id", None)
                     id_obra = getattr(participacao, "id_obra", None) or getattr(participacao, "obra_id", None)
                     data_inclusao = getattr(participacao, "data_inclusao", None) or getattr(participacao, "data", None)
@@ -750,7 +961,7 @@ class DatabaseManager:
                 cur = con.cursor()
                 cur.execute("""
                     SELECT pe.id as participacao_id, pe.data_inclusao, pe.observacao,
-                           o.* 
+                           o.*
                     FROM participacao_exposicao pe
                     JOIN obras o ON o.id_obra = pe.id_obra
                     WHERE pe.id_exposicao = ?
@@ -770,5 +981,9 @@ class DatabaseManager:
         except Exception:
             return False
 
-# Instância global
-db = DatabaseManager()
+
+# Instância global segura do gerenciador
+try:
+    db = DatabaseManager()
+except Exception:
+    db = None
