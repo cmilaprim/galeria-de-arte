@@ -117,9 +117,6 @@ class RelatorioController:
             if "localizacao" in filtros_brutos and filtros_brutos["localizacao"]:
                 filtros_validados["localizacao"] = filtros_brutos["localizacao"]
                 
-                
-            if "artistas" in filtros_brutos and filtros_brutos["artistas"]:
-                filtros_validados["artistas"] = filtros_brutos["artistas"]
             
             if "artistas" in filtros_brutos and filtros_brutos["artistas"]:
                 filtros_validados["artistas"] = filtros_brutos["artistas"]
