@@ -152,10 +152,8 @@ class TransacaoController:
             if not transacao:
                 return False, "Transação não encontrada."
 
-            # bloqueios específicos
             if tipo == "Devolução" or transacao.tipo == "Devolução":
                 return False, "Transações de Devolução não podem ser editadas."
-            # se modelo tiver atributo 'devolucao' e estiver marcado, bloqueia edição
             if hasattr(transacao, "devolucao") and getattr(transacao, "devolucao"):
                 return False, "Transações com devolução registrada não podem ser editadas."
 
@@ -181,12 +179,33 @@ class TransacaoController:
             except Exception:
                 return False, "Valor inválido."
 
-            # Valida disponibilidade antes de atualizar (aceita ids ou títulos)
+            # prepara conjunto das obras que já pertenciam à transação original
+            try:
+                existing_obras_raw = getattr(transacao, "obras", None) or []
+                existing_obras_set = {str(x).strip() for x in existing_obras_raw}
+            except Exception:
+                existing_obras_set = set()
+
+            # Valida disponibilidade antes de atualizar (aceita ids ou títulos).
+            # Importante: obras que já faziam parte da transação original são permitidas mesmo que não estejam "Disponível".
             for obra_id_or_title in obras:
+                s_key = str(obra_id_or_title).strip()
+                # se já fazia parte da transação original, pular validação de disponibilidade
+                if s_key in existing_obras_set:
+                    continue
+
                 status_obra, titulo = self._get_obra_status_and_title(obra_id_or_title)
                 if status_obra is None:
                     return False, f"Obra '{obra_id_or_title}' não encontrada."
-                if tipo in ["Venda", "Aluguel", "Empréstimo"] and status_obra != "Disponível":
+
+                # normaliza status para comparação (lida com enum/string)
+                try:
+                    st = status_obra.value if hasattr(status_obra, "value") else str(status_obra)
+                except Exception:
+                    st = str(status_obra or "")
+
+                st_norm = st.strip().lower()
+                if tipo in ["Venda", "Aluguel", "Empréstimo"] and "dispon" not in st_norm:
                     return False, f"Obra '{titulo or obra_id_or_title}' não está disponível para {tipo}."
 
             # Atualiza propriedades no objeto transacao e persiste
@@ -199,18 +218,23 @@ class TransacaoController:
 
             self.db_manager.atualizar_transacao(transacao)
 
-            # Atualiza status das obras se aplicável
+            # Atualiza status das obras se aplicável (venda/aluguel/empréstimo)
             status_map = {"Venda": "Vendida", "Aluguel": "Alugada", "Empréstimo": "Empréstimo"}
             novo_status = status_map.get(tipo)
             if novo_status:
                 for obra_id_or_title in obras:
-                    _, titulo = self._get_obra_status_and_title(obra_id_or_title)
-                    if titulo:
-                        try:
-                            self.db_manager.atualizar_status_obra_por_titulo(titulo, novo_status)
-                        except Exception:
-                            # fallback silencioso se não for possível atualizar
-                            pass
+                    try:
+                        _, titulo = self._get_obra_status_and_title(obra_id_or_title)
+                        if titulo:
+                            try:
+                                # tenta atualizar pelo título (método existente)
+                                self.db_manager.atualizar_status_obra_por_titulo(titulo, novo_status)
+                            except Exception:
+                                # fallback silencioso
+                                pass
+                    except Exception:
+                        # não interrompe o processo se uma obra falhar na atualização de status
+                        continue
 
             return True, "Transação atualizada com sucesso!"
         except Exception as e:

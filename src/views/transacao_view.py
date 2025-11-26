@@ -204,9 +204,27 @@ class TransacaoView:
         data_transacao = self.entry_data_transacao.get_date().strftime("%d/%m/%Y")
         observacoes = self.text_obs.get("1.0", tk.END).strip()
 
-        if not cliente or not valor_texto or not tipo or not data_transacao or not self.obras_selecionadas:
-            messagebox.showerror("Erro", "Todos os campos obrigatórios devem ser preenchidos, incluindo a seleção das obras.")
+        if not cliente:
+            messagebox.showerror("Erro", "O campo Cliente é obrigatório.")
             return
+
+        if not valor_texto:
+            messagebox.showerror("Erro", "O campo Valor é obrigatório.")
+            return
+
+        if not tipo:
+            messagebox.showerror("Erro", "O campo Tipo é obrigatório.")
+            return
+
+        if not data_transacao:
+            messagebox.showerror("Erro", "O campo Data da Transação é obrigatório.")
+            return
+
+        if not self.obras_selecionadas:
+            messagebox.showerror("Erro", "Você deve selecionar pelo menos uma obra.")
+            return
+
+        # Validação de valor numérico
         try:
             valor = float(valor_texto)
         except ValueError:
@@ -216,6 +234,7 @@ class TransacaoView:
         # enviamos lista de ids (strings)
         obras_para_salvar = [str(x).strip() for x in self.obras_selecionadas]
 
+        # Atualiza ou cadastra
         if self.transacao_selecionada:
             success, msg = self.controller.atualizar_transacao(
                 transacao_id=self.transacao_selecionada,
